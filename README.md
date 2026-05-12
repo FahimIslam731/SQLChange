@@ -1,2 +1,2 @@
 # SQLChange
-ECS 189G Project
+ECS 189G Final Project
