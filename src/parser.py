@@ -98,6 +98,39 @@ def parse_sql(dataframe_string: str):
 
     return sql_column_details
 
+def get_where_details(dataframe_string: str):
+    """
+        This functions finds all the details present in the where sql query and 
+        extracts them into a dictionary wwhich would be used to build langraph later in pipeline 
+    """
+    try:
+        # Parsing the sql string into a sql tree 
+        sql_tree = sqlglot.parse_one(dataframe_string)
+        # Extracting the where condition in the dataframe for building the langgraph
+        where_details = sql_tree.find_all(exp.Where)
+
+        if not where_details:
+            return []
+        
+        # Variable to store all the dependencies in the where queries
+        dependencies_where = []
+
+        # Iterating through all the individual where conditions in the sql query strings
+        for individual_where_query in where_details:
+            for columns in individual_where_query.find_all(exp.Column):
+                dependencies_where.append({
+                    "condition": str(individual_where_query.this),
+                    "table":     columns.table or "UNKNOWN",
+                    "column":    columns.name
+                })
+
+        return dependencies_where
+    
+    except Exception:
+        print(f"Error: parser.py : could dnot parse the where sql query : {dataframe_string}")
+        return []
+
+
 def get_join_keys(dataframe_string: str):
     """
         This functions finds all the relationships between the join keys for 

@@ -9,7 +9,7 @@
 
 import pandas as pd
 from mutation_engine import(match_sql_to_mutation, mutation_function_mapping, mutation_function_occurances)
-from parser import validate_sql_columns, parse_sql, get_join_keys
+from parser import validate_sql_columns, parse_sql, get_join_keys, get_where_details
 
 
 def build_mutation_maps(csv_filename: str):
@@ -30,12 +30,21 @@ def build_mutation_maps(csv_filename: str):
             counts_mutation[mutation] = 0
 
         # Iterrating though all the rows in the sql database
-        for _, rows in csv_dataset.itertuples():
+        for _, rows in csv_dataset.iterrows():
             # Finding all the inidivudal entries from the "sql" column
             individual_sql_commands = rows["sql"]
 
             # Load all the mutations that can be made for the input string
             applicable_multations = match_sql_to_mutation(individual_sql_commands)
+
+            # Getting all the join keys relationships for the sql queries
+            join_keys = get_join_keys(individual_sql_commands)
+
+            # Getting all the where dependencies inside the sql query
+            where_details = get_where_details(individual_sql_commands)
+
+            # Builidng the context for the individual sql string
+            context = parse_sql(rows["sql_context"])
 
             # Iterrating through all the mutation types applicable for the sql strings
             for mutation in applicable_multations:
@@ -47,7 +56,7 @@ def build_mutation_maps(csv_filename: str):
                     modified_sql_query = mutation_function_mapping[mutation](individual_sql_commands)
 
                     # If mutation function failed or mutations not been made perfectly skip the entry
-                    if modified_sql_query.strip() == individual_sql_commands.strip() or modified_sql_query is None:
+                    if modified_sql_query is None or modified_sql_query.strip() == individual_sql_commands.strip() or not validate_sql_columns(modified_sql_query, context):
                         continue
 
                     # Appending the mutated string to the specific pairs
@@ -56,10 +65,12 @@ def build_mutation_maps(csv_filename: str):
                         "source_id": int(rows["id"]),
                         "domain": rows["domain"],
                         "complexity": rows["sql_complexity"],
-                        "context": rows["sql_context"],
+                        "context": context,
                         "original_sql": individual_sql_commands,
                         "mutation_type": mutation,
                         "modified_sql": modified_sql_query,
+                        "join_keys": join_keys,
+                        "where_details": where_details,
                         "risk_label": None,
                         "performance_label": None,
                         "semantic_label": None
