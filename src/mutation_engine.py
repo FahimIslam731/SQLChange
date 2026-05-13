@@ -241,9 +241,39 @@ mutation_function_occurances = {
     "column_drop": 100,
 }
 
-def create_mutations():
+def match_sql_to_mutation(sql_string: str):
     """ 
-        Internal function which creates mutations on individual sql commands present in the
-        dataset
+        Internal function which creates mutations on individual sql commands while iterrating though
+        the entires present in the csv database
     """
+    try:
+        # Parsing the string to a sql tree 
+        sql_tree = sqlglot.parse_one(sql_string)
 
+        # Variable to store the mutations that are applicaible to be done according to the sql query
+        applicable_multations = []
+
+        # finding if conditions are present
+        join_condition_present = sql_tree.find(exp.Join)
+        where_condition_present = sql_tree.find(exp.Where)
+        limit_condition_present = sql_tree.find(exp.Limit)
+        group_by_condition_present = sql_tree.find(exp.Group)
+        select_conidtion_present = sql_tree.find(exp.Select)
+
+        # Finding all applicaiton conditions for builidng the mutation sql command matching
+        if select_conidtion_present and len(select_conidtion_present.expressions) > 1:
+            applicable_multations.append("column_drop")
+        if join_condition_present:
+            applicable_multations.append("join_swap")
+            applicable_multations.append("join_drop")
+        if where_condition_present:
+            applicable_multations.append("where_drop")
+        if not limit_condition_present:
+            applicable_multations.append("limit_add")
+        if group_by_condition_present:
+            applicable_multations.append("group_by_drop")
+
+        return applicable_multations
+    except Exception:
+        print(f"Error: mutation_engine.py: Error finding mutation funtion for {sql_string}")
+        return []

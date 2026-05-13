@@ -19,17 +19,17 @@ def validate_sql_columns(dataframe_string, sql_column_details):
 
     # Parsing the sql string into a sql tree
     try:
-        sql_tree = sqlglot.parse(dataframe_string)
+        sql_tree = sqlglot.parse_one(dataframe_string)
     except Exception:
         print(f"ERROR: parser.py : Dataframe could not be parsed by sqlglot library: {dataframe_string}")
         return None
 
     # Variable to store all the columns present in the dictionary
-    sql_dictionary_columns = {}
+    sql_columns = []
 
     for column_entry in sql_column_details.values():
-        for column in column_entry:
-            sql_dictionary_columns.append(column)
+        for column in column_entry["columns"]:
+            sql_columns.append(column)
 
     # Variable to find all the column names present in the sql database 
     sql_dataframe_columns = sql_tree.find_all(exp.Column)
@@ -39,7 +39,7 @@ def validate_sql_columns(dataframe_string, sql_column_details):
         if column.name == "*" or not column.name:
             continue
 
-        if column.name not in sql_dictionary_columns:
+        if column.name not in sql_columns:
             print(f"ERROR: parser.py : Could not find the column entry {column.name} in the database")
             return False
 
@@ -84,7 +84,7 @@ def parse_sql(dataframe_string: str):
             else:
                 type = "UNKNOWN"
 
-            individual_columns.append(column)
+            individual_columns.append(column.name)
             column_found = True
             # Storing the types of the columns in a dictionary 
             column_types[column.name] = type
@@ -126,8 +126,8 @@ def get_join_keys(dataframe_string: str):
 
             # Iterrating through all the join keys present in the on clause statement 
             for individual_relations in join_entries:
-                left_key = individual_join_conditions.left
-                right_key = individual_join_conditions.right
+                left_key = individual_relations.left
+                right_key = individual_relations.right
 
                 # If both sides contain valid column entries then build a relationship between them
                 if isinstance(left_key, exp.Column) and isinstance(right_key, exp.Column):
