@@ -10,9 +10,9 @@
 import pandas as pd
 from mutation_engine import(match_sql_to_mutation, mutation_function_mapping, mutation_function_occurances)
 from parser import validate_sql_columns, parse_sql, get_join_keys, get_where_details
+from graph_representer import build_graph
 
-
-def build_mutation_maps(csv_filename: str):
+def build_mutation_maps(csv_filename: str, model_name: str, provider: str, api_key: str):
     """
         Python funciton to create different mutations for specific sql squeries on individual sql 
         dataframes from the csv file. This functions analyses queries and returning a list of mutation
@@ -46,6 +46,9 @@ def build_mutation_maps(csv_filename: str):
             # Builidng the context for the individual sql string
             context = parse_sql(rows["sql_context"])
 
+            # Building the entity relationship graph for the query 
+            er_graph = build_graph(context, join_keys, where_details, model_name, provider, api_key)
+
             # Iterrating through all the mutation types applicable for the sql strings
             for mutation in applicable_multations:
                 # To limit the number of mutations in the dataset check if we don't exceed the individual limts
@@ -71,6 +74,7 @@ def build_mutation_maps(csv_filename: str):
                         "modified_sql": modified_sql_query,
                         "join_keys": join_keys,
                         "where_details": where_details,
+                        "er_graph": er_graph["data_graph"],
                         "risk_label": None,
                         "performance_label": None,
                         "semantic_label": None
