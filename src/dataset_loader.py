@@ -59,7 +59,7 @@ def build_mutation_maps(csv_filename: str, model_name: str, provider: str, api_k
                     modified_sql_query = mutation_function_mapping[mutation](individual_sql_commands)
 
                     # If mutation function failed or mutations not been made perfectly skip the entry
-                    if modified_sql_query is None or modified_sql_query.strip() == individual_sql_commands.strip() or not validate_sql_columns(modified_sql_query, context):
+                    if modified_sql_query is None or modified_sql_query.strip() == individual_sql_commands.strip() or not validate_sql_columns(modified_sql_query, context, individual_sql_commands):
                         continue
 
                     # Appending the mutated string to the specific pairs
