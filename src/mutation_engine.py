@@ -54,17 +54,15 @@ def _join_swap(sql_string : str):
             return None
         
         # Store the condition in the where sql condition
-        join_condition = sql_join.args.get("kind", "")
-        if join_condition:
-            join_condition = str(join_condition).upper()
-        else:
-            join_condition = ""
+        join_condition = str(sql_join.args.get("side", "") or "").upper()
 
         # If there is a left condition present then swap it with the right condition
         if "LEFT" in join_condition:
+            sql_join.set("kind", "")
             sql_join.set("kind", "INNER")
         else:
-            sql_join.set("kind", "LEFT OUTER")
+            sql_join.set("kind", "")
+            sql_join.set("kind", "LEFT")
 
         return sql_tree.sql(dialect=dialect)       
     except Exception:
