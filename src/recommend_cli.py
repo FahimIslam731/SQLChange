@@ -1,5 +1,5 @@
 """
-CLI for the SQLChange recommendation engine.
+CLI for the SQLChange agentic recommendation engine.
 
 Usage:
     python recommend_cli.py --sql "SELECT ..." --schema "CREATE TABLE ..."
@@ -28,38 +28,42 @@ def _print_result(result):
     rec = result["recommendation"]
 
     print("\n" + "=" * 60)
-    print("SQLChange Optimization Report")
+    print("SQLChange Agentic Optimization Report")
     print("=" * 60)
-    print(f"\nOriginal:  {result['original_sql'][:100]}")
+    print(f"\nOriginal:    {result['original_sql'][:100]}")
+    print(f"Iterations:  {result['iterations']}")
 
-    if not result["candidates"]:
-        print(f"\n{rec['summary']}")
-        return
+    print("\n--- LLM ANALYSIS ---")
+    print(f"  {result.get('llm_analysis', 'N/A')[:300]}")
 
-    print(f"\nCandidates tested: {len(result['candidates'])}")
-    for i, c in enumerate(result["candidates"]):
-        equiv = c["equivalence"]
-        print(f"\n  [{i}] {c['mutation_type']}")
-        print(f"      SQL: {c['modified_sql'][:80]}...")
-        print(f"      Equiv: {equiv.get('output_relation', '?')}"
-              f"  Rows: {equiv.get('row_count_original', '?')}"
-              f" -> {equiv.get('row_count_modified', '?')}")
-        if "error" not in c["performance"]:
-            large = c["performance"].get("large", {})
-            if large.get("speedup"):
-                print(f"      Speedup: {large['speedup']:.2f}x"
-                      f" ({large.get('original_ms', 0):.2f}ms"
-                      f" -> {large.get('modified_ms', 0):.2f}ms)")
-        print(f"      Rules: semantic={c['rules']['semantic']['label']}"
-              f"  perf={c['rules']['performance']['label']}"
-              f"  risk={c['rules']['risk']['label']}")
+    if result["candidates"]:
+        print(f"\n--- CANDIDATES TESTED ({len(result['candidates'])}) ---")
+        for i, c in enumerate(result["candidates"]):
+            equiv = c["equivalence"]
+            print(f"\n  [{i}] {c['mutation_type']}")
+            print(f"      SQL: {c['modified_sql'][:80]}...")
+            print(f"      Equiv: {equiv.get('output_relation', '?')}"
+                  f"  Rows: {equiv.get('row_count_original', '?')}"
+                  f" -> {equiv.get('row_count_modified', '?')}")
+            if "error" not in c.get("performance", {}):
+                large = c["performance"].get("large", {})
+                if large.get("speedup"):
+                    print(f"      Speedup: {large['speedup']:.2f}x"
+                          f" ({large.get('original_ms', 0):.2f}ms"
+                          f" -> {large.get('modified_ms', 0):.2f}ms)")
+            print(f"      Rules: semantic={c['rules']['semantic']['label']}"
+                  f"  perf={c['rules']['performance']['label']}"
+                  f"  risk={c['rules']['risk']['label']}")
 
-    print("\n" + "-" * 60)
-    print("LLM RECOMMENDATION")
-    print("-" * 60)
+    print("\n--- LLM EVALUATION ---")
+    print(f"  {result.get('llm_evaluation', 'N/A')[:400]}")
+
+    print("\n" + "=" * 60)
+    print("FINAL RECOMMENDATION")
+    print("=" * 60)
 
     if rec.get("recommended_sql"):
-        print(f"\n  Recommended SQL: {rec['recommended_sql'][:100]}")
+        print(f"\n  SQL: {rec['recommended_sql'][:100]}")
 
     for dim in ("semantic", "performance", "risk"):
         if dim in rec:
@@ -69,12 +73,12 @@ def _print_result(result):
             print(f"  {'':>13} {d.get('rationale', '')}")
 
     if rec.get("summary"):
-        print(f"\n  Summary: {rec['summary']}")
+        print(f"\n  {rec['summary']}")
     print("\n" + "=" * 60)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="SQLChange Optimization Engine")
+    parser = argparse.ArgumentParser(description="SQLChange Agentic Optimizer")
 
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--sql", type=str, help="SQL query to optimize")
