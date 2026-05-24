@@ -59,36 +59,40 @@ def llm_universal_call_utility(prompt: str, provider: str, api_key: str = None, 
         port = 11435 if provider == "caliper" else 11434
         num_predict = kwargs.get("num_predict", 128)
         timeout = kwargs.get("timeout", 600)
+        think = kwargs.get("think", True)
+        opts = {"num_predict": num_predict}
         if provider == "caliper":
-            r = requests.post(
-                f"http://localhost:{port}/api/chat",
-                json={
-                    "model": model or "llama3",
-                    "messages": [{"role": "user", "content": prompt}],
-                    "stream": False,
-                    "options": {"num_predict": num_predict}
-                },
-                timeout=timeout
-            )
+            body = {
+                "model": model or "llama3",
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False,
+                "options": opts
+            }
+            if not think:
+                body["think"] = False
+            r = requests.post(f"http://localhost:{port}/api/chat",
+                              json=body, timeout=timeout)
             data = r.json()
             if "error" in data:
                 raise RuntimeError(data["error"])
             response = data["message"]["content"]
         else:
-            r = requests.post(
-                f"http://localhost:{port}/api/generate",
-                json={
-                    "model": model or "llama3",
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {"num_predict": num_predict}
-                },
-                timeout=300
-            )
+            body = {
+                "model": model or "llama3",
+                "prompt": prompt,
+                "stream": False,
+                "options": opts
+            }
+            if not think:
+                body["think"] = False
+            r = requests.post(f"http://localhost:{port}/api/generate",
+                              json=body, timeout=timeout)
             data = r.json()
             if "error" in data:
                 raise RuntimeError(data["error"])
             response = data["response"]
+        import re
+        response = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
     elif provider == "anthropic":
         import anthropic
         # Initialize the client

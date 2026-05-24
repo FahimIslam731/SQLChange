@@ -100,26 +100,16 @@ def _build_attribution_prompt(record: Dict[str, Any], evidence: Dict[str, Any] =
                          f"perf={rules.get('performance','?')} risk={rules.get('risk','?')}")
         evidence_block = "\n".join(parts)
 
-    return f"""SQL change analysis. Two tasks:
+    return f"""Classify SQL change and rate component importance. JSON only, no explanation.
 
-1. Classify this SQL modification:
-   - semantic: equivalent, narrower, broader, or different
-   - performance: improves, degrades, neutral, or unknown
-   - risk: low, medium, or high
-
-2. For each SQL component, rate how important it was to YOUR classification above.
-   Use ONLY these importance values: high, medium, low, none.
-   "high" = this component was critical to your judgment.
-   "none" = this component was irrelevant.
-
-Mutation: {mutation_type}
-Schema: {schema_summary}
-Original: {original}
-Modified: {modified}
+Mutation: {mutation_type} | Schema: {schema_summary}
+Old: {original}
+New: {modified}
 {evidence_block}
-
-Return ONLY valid JSON (no markdown, no explanation):
-{{"classification":{{"semantic":"...","performance":"...","risk":"..."}},"attribution":{{"WHERE":{{"semantic":"high|medium|low|none","performance":"high|medium|low|none","risk":"high|medium|low|none"}},"JOIN":{{"semantic":"...","performance":"...","risk":"..."}},"GROUP_BY":{{"semantic":"...","performance":"...","risk":"..."}},"SELECT_COLUMNS":{{"semantic":"...","performance":"...","risk":"..."}},"LIMIT":{{"semantic":"...","performance":"...","risk":"..."}},"ORDER_BY":{{"semantic":"...","performance":"...","risk":"..."}}}}}}"""
+Classify: semantic={{equivalent,narrower,broader,different}} performance={{improves,degrades,neutral,unknown}} risk={{low,medium,high}}
+Rate each component importance: high/medium/low/none.
+ONLY valid JSON:
+{{"classification":{{"semantic":"...","performance":"...","risk":"..."}},"attribution":{{"WHERE":{{"semantic":"...","performance":"...","risk":"..."}},"JOIN":{{"semantic":"...","performance":"...","risk":"..."}},"GROUP_BY":{{"semantic":"...","performance":"...","risk":"..."}},"SELECT_COLUMNS":{{"semantic":"...","performance":"...","risk":"..."}},"LIMIT":{{"semantic":"...","performance":"...","risk":"..."}},"ORDER_BY":{{"semantic":"...","performance":"...","risk":"..."}}}}}}"""
 
 
 def _parse_response(raw: str) -> Dict[str, Any]:
@@ -161,7 +151,7 @@ def attribute_record(record: Dict[str, Any], provider: str = "caliper",
         raw = llm_universal_call_utility(
             prompt=prompt, provider=provider,
             api_key=api_key, model=model,
-            num_predict=512
+            num_predict=350, think=False
         )
     except Exception as e:
         print(f"  LLM call failed: {e}")
