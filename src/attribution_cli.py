@@ -35,7 +35,8 @@ def main():
                         help="Single record index from dataset")
     parser.add_argument("--sample-size", type=int, default=None,
                         help="Number of records to analyze")
-    parser.add_argument("--input", type=str, default="../data/sqlchange_dataset.json")
+    parser.add_argument("--input", type=str,
+                        default=os.path.join(os.path.dirname(__file__), "..", "data", "sqlchange_dataset.json"))
     parser.add_argument("--provider", default="caliper",
                         choices=["anthropic", "openai", "local", "caliper"])
     parser.add_argument("--model", default=None)

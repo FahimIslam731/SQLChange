@@ -57,19 +57,38 @@ def llm_universal_call_utility(prompt: str, provider: str, api_key: str = None, 
     if provider in ("local", "caliper"):
         import requests
         port = 11435 if provider == "caliper" else 11434
-        r = requests.post(
-            f"http://localhost:{port}/api/generate",
-            json={
-                "model": model or "llama3",
-                "prompt": prompt,
-                "stream": False
-            },
-            timeout=300
-        )
-        data = r.json()
-        if "error" in data:
-            raise RuntimeError(data["error"])
-        response = data["response"]
+        num_predict = kwargs.get("num_predict", 128)
+        timeout = kwargs.get("timeout", 600)
+        if provider == "caliper":
+            r = requests.post(
+                f"http://localhost:{port}/api/chat",
+                json={
+                    "model": model or "llama3",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": False,
+                    "options": {"num_predict": num_predict}
+                },
+                timeout=timeout
+            )
+            data = r.json()
+            if "error" in data:
+                raise RuntimeError(data["error"])
+            response = data["message"]["content"]
+        else:
+            r = requests.post(
+                f"http://localhost:{port}/api/generate",
+                json={
+                    "model": model or "llama3",
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {"num_predict": num_predict}
+                },
+                timeout=300
+            )
+            data = r.json()
+            if "error" in data:
+                raise RuntimeError(data["error"])
+            response = data["response"]
     elif provider == "anthropic":
         import anthropic
         # Initialize the client

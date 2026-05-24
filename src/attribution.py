@@ -31,61 +31,30 @@ def _build_attribution_prompt(record: Dict[str, Any]) -> str:
     mutation_type = record.get("mutation_type", "unknown")
     context = record.get("context", {})
 
-    schema_summary = ""
-    for table, info in context.items():
-        cols = ", ".join(info.get("columns", []))
-        schema_summary += f"  {table}({cols})\n"
+    schema_summary = ", ".join(
+        f"{t}({','.join(info.get('columns', []))})"
+        for t, info in context.items()
+    )
 
-    return f"""You are a SQL analysis judge. Given an original SQL query and a modified version,
-assess which structural components of the query are most important when determining
-the semantic change, performance impact, and risk level of the modification.
+    return f"""SQL change analysis. Two tasks:
 
-Mutation type applied: {mutation_type}
+1. Classify this SQL modification:
+   - semantic: equivalent, narrower, broader, or different
+   - performance: improves, degrades, neutral, or unknown
+   - risk: low, medium, or high
 
-Schema:
-{schema_summary}
-Original SQL:
-{original}
+2. For each SQL component, rate how important it was to YOUR classification above.
+   Use ONLY these importance values: high, medium, low, none.
+   "high" = this component was critical to your judgment.
+   "none" = this component was irrelevant.
 
-Modified SQL:
-{modified}
+Mutation: {mutation_type}
+Schema: {schema_summary}
+Original: {original}
+Modified: {modified}
 
-For each SQL component below, rate its importance (high/medium/low/none) to your
-assessment of each dimension (semantic, performance, risk). Explain briefly why.
-
-Components to evaluate:
-- WHERE: filter conditions
-- JOIN: join clauses and join types
-- GROUP_BY: grouping and aggregation
-- SELECT_COLUMNS: projected columns
-- LIMIT: row limits
-- ORDER_BY: ordering clauses
-
-Also provide your overall classification:
-- semantic: equivalent, narrower, broader, or different
-- performance: improves, degrades, neutral, or unknown
-- risk: low, medium, or high
-
-Return ONLY JSON:
-{{
-  "classification": {{
-    "semantic": "...",
-    "performance": "...",
-    "risk": "..."
-  }},
-  "component_attribution": {{
-    "WHERE": {{
-      "semantic": {{"importance": "high|medium|low|none", "reason": "..."}},
-      "performance": {{"importance": "...", "reason": "..."}},
-      "risk": {{"importance": "...", "reason": "..."}}
-    }},
-    "JOIN": {{...same structure...}},
-    "GROUP_BY": {{...same structure...}},
-    "SELECT_COLUMNS": {{...same structure...}},
-    "LIMIT": {{...same structure...}},
-    "ORDER_BY": {{...same structure...}}
-  }}
-}}"""
+Return ONLY valid JSON (no markdown, no explanation):
+{{"classification":{{"semantic":"...","performance":"...","risk":"..."}},"attribution":{{"WHERE":{{"semantic":"high|medium|low|none","performance":"high|medium|low|none","risk":"high|medium|low|none"}},"JOIN":{{"semantic":"...","performance":"...","risk":"..."}},"GROUP_BY":{{"semantic":"...","performance":"...","risk":"..."}},"SELECT_COLUMNS":{{"semantic":"...","performance":"...","risk":"..."}},"LIMIT":{{"semantic":"...","performance":"...","risk":"..."}},"ORDER_BY":{{"semantic":"...","performance":"...","risk":"..."}}}}}}"""
 
 
 def _parse_response(raw: str) -> Dict[str, Any]:
@@ -121,17 +90,30 @@ def attribute_record(record: Dict[str, Any], provider: str = "caliper",
     print(f"  Modified: {record.get('modified_sql', '')[:80]}...")
     print(f"  Calling {provider}...")
 
-    raw = llm_universal_call_utility(
-        prompt=prompt, provider=provider,
-        api_key=api_key, model=model
-    )
+    try:
+        raw = llm_universal_call_utility(
+            prompt=prompt, provider=provider,
+            api_key=api_key, model=model,
+            num_predict=512
+        )
+    except Exception as e:
+        print(f"  LLM call failed: {e}")
+        return {
+            "unique_id": record.get("unique_id"),
+            "mutation_type": record.get("mutation_type"),
+            "original_sql": record.get("original_sql"),
+            "modified_sql": record.get("modified_sql"),
+            "classification": {},
+            "component_attribution": {},
+            "error": str(e),
+        }
 
     print(f"  Response received ({len(raw)} chars)")
 
     parsed = _parse_response(raw)
 
     classification = parsed.get("classification", {})
-    attributions = parsed.get("component_attribution", {})
+    attributions = parsed.get("attribution", parsed.get("component_attribution", {}))
 
     result = {
         "unique_id": record.get("unique_id"),
@@ -145,6 +127,18 @@ def attribute_record(record: Dict[str, Any], provider: str = "caliper",
 
     _print_attribution(result)
     return result
+
+
+def _extract_importance(comp_data, dim):
+    """Extract importance from either nested or flat response format."""
+    if not isinstance(comp_data, dict):
+        return "none"
+    val = comp_data.get(dim, "none")
+    if isinstance(val, dict):
+        return val.get("importance", "none")
+    if isinstance(val, str):
+        return val
+    return "none"
 
 
 def _print_attribution(result: Dict[str, Any]):
@@ -165,8 +159,7 @@ def _print_attribution(result: Dict[str, Any]):
         comp_data = attributions.get(comp, {})
         scores = []
         for dim in DIMENSIONS:
-            dim_data = comp_data.get(dim, {})
-            importance = dim_data.get("importance", "none") if isinstance(dim_data, dict) else "none"
+            importance = _extract_importance(comp_data, dim)
             score = _importance_to_score(importance)
             scores.append(score)
 
@@ -200,8 +193,7 @@ def summarize_attributions(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         for comp in COMPONENTS:
             comp_data = attributions.get(comp, {})
             for dim in DIMENSIONS:
-                dim_data = comp_data.get(dim, {})
-                importance = dim_data.get("importance", "none") if isinstance(dim_data, dict) else "none"
+                importance = _extract_importance(comp_data, dim)
                 totals[comp][dim].append(_importance_to_score(importance))
 
     summary = {}
