@@ -12,7 +12,7 @@
 cd "$(dirname "$0")"
 
 PROVIDER="local"
-MODEL="${OLLAMA_MODEL:-llama3.1:8b}"
+MODEL="${OLLAMA_MODEL:-qwen3.6:27b}"
 RECORD=0
 BATCH=false
 
