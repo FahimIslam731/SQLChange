@@ -68,17 +68,23 @@ def _llm(prompt, state):
     raw = llm_universal_call_utility(
         prompt=prompt, provider=state["provider"],
         api_key=state["api_key"], model=state["model"])
+    if os.environ.get("SQLCHANGE_DEBUG"):
+        print(f"\n[DEBUG LLM response]\n{raw[:500]}\n[/DEBUG]\n")
     return raw.strip().replace("```json", "").replace("```", "").strip()
 
 
 def _parse_json(text):
+    import re
+    text = re.sub(r'[\x00-\x1f\x7f]', lambda m: ' ' if m.group() not in '\n\r\t' else m.group(), text)
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        import re
         match = re.search(r"\{.*\}", text, re.DOTALL)
         if match:
-            return json.loads(match.group(0))
+            try:
+                return json.loads(match.group(0))
+            except json.JSONDecodeError:
+                return {}
         return {}
 
 
@@ -89,32 +95,20 @@ def llm_analyze_query(state: RecommendState) -> RecommendState:
     applicable = match_sql_to_mutation(state["sql"])
     prev_candidates = state["candidates"]
 
-    prev_summary = ""
-    if prev_candidates:
-        prev_summary = (
-            "\n\nPrevious iteration results (avoid repeating these):\n"
-            + json.dumps([{
-                "mutation_type": c["mutation_type"],
-                "equivalent": c["equivalence"].get("output_relation"),
-                "speedup": c.get("performance", {}).get("large", {}).get("speedup"),
-            } for c in prev_candidates], indent=2)
-        )
+    prev_tried = [c["mutation_type"] for c in prev_candidates] if prev_candidates else []
 
+    record = {
+        "original_sql": state["sql"],
+        "mutation_types": applicable,
+        "join_keys": state["join_keys"],
+        "where_details": state["where_details"],
+        "iteration": state["iteration"] + 1,
+        "already_tried": prev_tried,
+    }
     prompt = (
-        "You are a SQL optimization expert. Analyze this query and decide which "
-        "mutations are worth trying to optimize it.\n\n"
-        f"Query: {state['sql']}\n"
-        f"Schema: {json.dumps(state['context'], default=str)}\n"
-        f"ER Graph: {json.dumps(state['er_graph'], default=str)}\n"
-        f"Available mutation types: {applicable}\n"
-        f"Iteration: {state['iteration'] + 1} of {MAX_ITERATIONS}"
-        f"{prev_summary}\n\n"
-        "For each mutation type, explain WHY it might help or hurt this specific query. "
-        "Then select which ones to test.\n\n"
-        "Return JSON:\n"
-        '{"analysis": "your reasoning about this query", '
-        '"mutations_to_try": ["mutation_type1", ...], '
-        '"reasoning_per_mutation": {"mutation_type": "why this might help"}}'
+        f"SQL: {state['sql']}\n"
+        f"Pick from: {applicable}\n"
+        'Reply ONLY: {"mutations_to_try":["..."]}'
     )
     response = _llm(prompt, state)
     parsed = _parse_json(response)
@@ -187,41 +181,15 @@ def python_generate_and_test(state: RecommendState) -> RecommendState:
 
 def llm_evaluate_results(state: RecommendState) -> RecommendState:
     """LLM reviews all tested candidates and reasons about each one."""
-    summary = []
+    lines = []
     for i, c in enumerate(state["candidates"]):
-        entry = {
-            "index": i,
-            "mutation_type": c["mutation_type"],
-            "modified_sql": c["modified_sql"],
-            "output_relation": c["equivalence"].get("output_relation"),
-            "row_count_original": c["equivalence"].get("row_count_original"),
-            "row_count_modified": c["equivalence"].get("row_count_modified"),
-            "rule_semantic": c["rules"]["semantic"]["label"],
-            "rule_risk": c["rules"]["risk"]["label"],
-        }
-        if "error" not in c.get("performance", {}):
-            large = c["performance"].get("large", {})
-            entry["speedup"] = large.get("speedup")
-            entry["original_ms"] = large.get("original_ms")
-            entry["modified_ms"] = large.get("modified_ms")
-        summary.append(entry)
+        spd = c.get("performance", {}).get("large", {}).get("speedup", "?")
+        eq = c["equivalence"].get("output_relation", "?")
+        lines.append(f"{i}:{c['mutation_type']} eq={eq} spd={spd}")
 
     prompt = (
-        "You are evaluating SQL optimization candidates. For each candidate, "
-        "reason about:\n"
-        "1. Does it preserve correctness? (output_relation: identical = safe)\n"
-        "2. Does it actually improve performance? (speedup > 1.0 = faster)\n"
-        "3. What is the real-world risk?\n\n"
-        f"Original query: {state['sql']}\n"
-        f"Your earlier analysis: {state['llm_analysis']}\n\n"
-        f"Candidates with evidence:\n{json.dumps(summary, indent=2)}\n\n"
-        f"Iteration {state['iteration']} of {MAX_ITERATIONS}. "
-        "Should we explore further or is a candidate good enough?\n\n"
-        "Return JSON:\n"
-        '{"evaluation": "your detailed reasoning about each candidate", '
-        '"best_candidate_index": <int or null>, '
-        '"should_iterate": true/false, '
-        '"iterate_reason": "what would you try differently next round"}'
+        f"Candidates:\n" + "\n".join(lines) + "\n"
+        'Pick best. Reply ONLY: {"best_candidate_index":0,"should_iterate":false}'
     )
     response = _llm(prompt, state)
     parsed = _parse_json(response)
@@ -255,24 +223,15 @@ def llm_recommend(state: RecommendState) -> RecommendState:
         chosen = None
         chosen_sql = state["sql"]
 
+    rule_result = chosen["rules"] if chosen else {}
     prompt = (
-        "You are a SQL optimization advisor giving your final recommendation.\n\n"
-        f"Original SQL: {state['sql']}\n"
-        f"Recommended SQL: {chosen_sql}\n"
-        f"Your analysis: {state['llm_analysis']}\n"
-        f"Your evaluation: {state['llm_evaluation']}\n"
-        f"Iterations used: {state['iteration']}\n\n"
-        "Provide your final assessment.\n\n"
-        "Return ONLY JSON:\n"
-        "{\n"
-        '  "recommended_sql": "the SQL to use",\n'
-        '  "semantic": {"label": "equivalent|narrower|broader|different", '
-        '"confidence": 0.0, "rationale": "..."},\n'
-        '  "performance": {"label": "improves|degrades|neutral|unknown", '
-        '"confidence": 0.0, "rationale": "..."},\n'
-        '  "risk": {"label": "low|medium|high", "confidence": 0.0, "rationale": "..."},\n'
-        '  "summary": "one-paragraph justification of the recommendation"\n'
-        "}"
+        f"Original: {state['sql']}\n"
+        f"Modified: {chosen_sql}\n"
+        f"Rules: {json.dumps(rule_result, separators=(',', ':'))}\n"
+        'Reply ONLY JSON:\n'
+        '{"recommended_sql":"<sql>","semantic":{"label":"<equivalent|narrower|broader|different>"},'
+        '"performance":{"label":"<improves|degrades|neutral>"},'
+        '"risk":{"label":"<low|medium|high>"},"summary":"<1 sentence>"}'
     )
     response = _llm(prompt, state)
     state["recommendation"] = _parse_json(response)
@@ -330,12 +289,16 @@ def recommend(sql, schema_ddl, provider="anthropic",
     where_details = get_where_details(sql)
 
     er_graph = {}
-    try:
-        out = build_graph(context, join_keys, where_details, model, provider, api_key)
-        er_graph = out.get("data_graph", {})
-    except Exception:
-        pass
+    if provider not in ("local", "caliper"):
+        try:
+            print("[sqlchange] Building ER graph...")
+            out = build_graph(context, join_keys, where_details, model, provider, api_key)
+            er_graph = out.get("data_graph", {})
+            print("[sqlchange] ER graph built.")
+        except Exception as e:
+            print(f"[sqlchange] ER graph skipped: {e}")
 
+    print("[sqlchange] Starting agentic pipeline...")
     initial_state = {
         "sql": sql,
         "schema_ddl": schema_ddl,

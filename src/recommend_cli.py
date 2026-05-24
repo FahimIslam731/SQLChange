@@ -11,6 +11,9 @@ import json
 import os
 import sys
 
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+
 from recommend import recommend
 
 
@@ -87,15 +90,19 @@ def main():
     parser.add_argument("--schema", type=str, help="Schema DDL (required with --sql)")
     parser.add_argument("--input", type=str, default="../data/sqlchange_dataset.json")
     parser.add_argument("--provider", default="anthropic",
-                        choices=["anthropic", "openai", "local"])
+                        choices=["anthropic", "openai", "local", "caliper"])
     parser.add_argument("--model", default="claude-sonnet-4-20250514")
     parser.add_argument("--api-key", default=None)
+    parser.add_argument("--caliper", action="store_true",
+                        help="Route inference through Caliper OpenGllama (localhost:11435)")
     parser.add_argument("--json", action="store_true", help="Output raw JSON")
 
     args = parser.parse_args()
+    if args.caliper:
+        args.provider = "caliper"
     api_key = _resolve_api_key(args)
 
-    if not api_key and args.provider != "local":
+    if not api_key and args.provider not in ("local", "caliper"):
         print(f"Error: No API key for {args.provider}. Set ANTHROPIC_API_KEY or pass --api-key.")
         sys.exit(1)
 

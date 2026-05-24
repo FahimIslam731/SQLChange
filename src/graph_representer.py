@@ -54,17 +54,22 @@ def llm_universal_call_utility(prompt: str, provider: str, api_key: str = None, 
         for inferencing and getting response for prompts
     """
     response = None
-    if provider == "local":
+    if provider in ("local", "caliper"):
         import requests
-        response = requests.post(
-            "http://localhost:11434/api/generate",
+        port = 11435 if provider == "caliper" else 11434
+        r = requests.post(
+            f"http://localhost:{port}/api/generate",
             json={
                 "model": model or "llama3",
                 "prompt": prompt,
                 "stream": False
-            }
+            },
+            timeout=300
         )
-        response = response.json()["response"]
+        data = r.json()
+        if "error" in data:
+            raise RuntimeError(data["error"])
+        response = data["response"]
     elif provider == "anthropic":
         import anthropic
         # Initialize the client
