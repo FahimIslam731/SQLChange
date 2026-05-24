@@ -25,10 +25,7 @@ flowchart TD
         LLM_INFER --> BUILD_ER
     end
 
-    BUILD_ER --> MUTATE
-
-    MUTATE["<b>Mutation engine</b><br/>where_drop · join_swap · join_drop<br/>group_by_drop · limit_add · column_drop"]
-    MUTATE --> BUILD_DATASET
+    BUILD_ER --> BUILD_DATASET
 
     subgraph EXEC ["Execution harness"]
         direction TB
@@ -69,7 +66,6 @@ flowchart TD
     style PYTHON_NODE fill:#d5f5e3,stroke:#1e8449,color:#333
     style LLM_INFER fill:#fadbd8,stroke:#c0392b,color:#333
     style BUILD_ER fill:#e8daef,stroke:#8e44ad,color:#333
-    style MUTATE fill:#e8daef,stroke:#8e44ad,color:#333
     style BUILD_DATASET fill:#d6eaf8,stroke:#2471a3,color:#333
     style TIME_COMP fill:#d6eaf8,stroke:#2471a3,color:#333
     style REASONING fill:#fadbd8,stroke:#c0392b,color:#333
@@ -102,10 +98,6 @@ Conditional edge checking whether DDL (CREATE TABLE statements) was provided alo
 
 ### ER graph sub-graph
 The `graph_representer.py` LangGraph pipeline. Parses table names from the context, then routes conditionally: if explicit join keys exist, a Python node extracts relationships directly from ON clauses (high confidence). If no join keys exist but multiple tables are present, an LLM call infers likely relationships from column naming conventions. Both paths converge into the graph builder, which assigns table importance levels (root / intermediate / leaf), detects cross-table WHERE dependencies, and computes graph depth.
-
-### Mutation engine
-Applies programmatic SQL mutations using `sqlglot` AST manipulation. Six mutation types: `where_drop`, `join_swap`, `join_drop`, `group_by_drop`, `limit_add`, `column_drop`. Each mutation is validated against the schema context to ensure the modified query is structurally valid.
-
 ### Build dataset
 Generates synthetic test data using `synthetic_db.py`. Creates in-memory SQLite tables from the context dict, populates them with deterministic fake data (seeded RNG), applies join-value alignment so foreign keys match, and injects WHERE boundary values so filters have both passing and failing rows. Supports configurable scale (small / large row counts per table).
 
