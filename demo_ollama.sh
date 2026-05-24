@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 
 PROVIDER="local"
 RECORD=0
-MODEL="${OLLAMA_MODEL:-gpt-oss:20b}"
+MODEL="${OLLAMA_MODEL:-qwen3.6:27b}"
 
 for arg in "$@"; do
     case "$arg" in

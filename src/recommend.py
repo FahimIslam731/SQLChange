@@ -39,7 +39,7 @@ from equivalence import check_equivalence
 from performance import compare_performance
 from reasoning_pipeline import _base_reasoning, _rule_signals
 
-MAX_ITERATIONS = 3
+MAX_ITERATIONS = 1
 
 # -- State ------------------------------------------------------------------
 
@@ -95,29 +95,11 @@ def llm_analyze_query(state: RecommendState) -> RecommendState:
     applicable = match_sql_to_mutation(state["sql"])
     prev_candidates = state["candidates"]
 
-    prev_tried = [c["mutation_type"] for c in prev_candidates] if prev_candidates else []
+    already_tried = {c["mutation_type"] for c in prev_candidates}
+    remaining = [m for m in applicable if m not in already_tried]
 
-    record = {
-        "original_sql": state["sql"],
-        "mutation_types": applicable,
-        "join_keys": state["join_keys"],
-        "where_details": state["where_details"],
-        "iteration": state["iteration"] + 1,
-        "already_tried": prev_tried,
-    }
-    prompt = (
-        f"SQL: {state['sql']}\n"
-        f"Pick from: {applicable}\n"
-        'Reply ONLY: {"mutations_to_try":["..."]}'
-    )
-    response = _llm(prompt, state)
-    parsed = _parse_json(response)
-
-    mutations = parsed.get("mutations_to_try", applicable)
-    valid = [m for m in mutations if m in applicable]
-
-    state["mutations_to_try"] = valid if valid else applicable
-    state["llm_analysis"] = parsed.get("analysis", response)
+    state["mutations_to_try"] = remaining if remaining else applicable
+    state["llm_analysis"] = f"Trying: {', '.join(state['mutations_to_try'])}"
     state["iteration"] = state["iteration"] + 1
     return state
 
@@ -180,39 +162,35 @@ def python_generate_and_test(state: RecommendState) -> RecommendState:
 # -- LLM Node 2: Evaluate Results ------------------------------------------
 
 def llm_evaluate_results(state: RecommendState) -> RecommendState:
-    """LLM reviews all tested candidates and reasons about each one."""
-    lines = []
+    """Pick best candidate deterministically: prefer identical equivalence, then highest speedup."""
+    best_idx = None
+    best_score = -1
     for i, c in enumerate(state["candidates"]):
-        spd = c.get("performance", {}).get("large", {}).get("speedup", "?")
-        eq = c["equivalence"].get("output_relation", "?")
-        lines.append(f"{i}:{c['mutation_type']} eq={eq} spd={spd}")
+        eq = c["equivalence"].get("output_relation", "error")
+        spd = c.get("performance", {}).get("large", {}).get("speedup", 0) or 0
+        risk = c["rules"]["risk"]["label"]
+        if eq == "error":
+            continue
+        score = spd * (10 if eq == "identical" else 1) * (0.1 if risk == "high" else 1)
+        if score > best_score:
+            best_score = score
+            best_idx = i
 
-    prompt = (
-        f"Candidates:\n" + "\n".join(lines) + "\n"
-        'Pick best. Reply ONLY: {"best_candidate_index":0,"should_iterate":false}'
+    summary = "; ".join(
+        f"{c['mutation_type']}:eq={c['equivalence'].get('output_relation','?')}"
+        f",spd={c.get('performance',{}).get('large',{}).get('speedup','?')}"
+        for c in state["candidates"]
     )
-    response = _llm(prompt, state)
-    parsed = _parse_json(response)
-
-    state["llm_evaluation"] = parsed.get("evaluation", response)
-
-    if not parsed.get("should_iterate") or state["iteration"] >= MAX_ITERATIONS:
-        state["done"] = True
-        best_idx = parsed.get("best_candidate_index")
-        if best_idx is not None and 0 <= best_idx < len(state["candidates"]):
-            state["recommendation"] = {"best_index": best_idx}
-        else:
-            state["recommendation"] = {"best_index": None}
-    else:
-        state["done"] = False
-
+    state["llm_evaluation"] = summary
+    state["done"] = True
+    state["recommendation"] = {"best_index": best_idx}
     return state
 
 
 # -- LLM Node 3: Final Recommendation --------------------------------------
 
 def llm_recommend(state: RecommendState) -> RecommendState:
-    """LLM produces the final structured recommendation."""
+    """Build final recommendation from rule labels; LLM provides only the summary."""
     best = state["recommendation"].get("best_index")
     candidates = state["candidates"]
 
@@ -223,49 +201,40 @@ def llm_recommend(state: RecommendState) -> RecommendState:
         chosen = None
         chosen_sql = state["sql"]
 
-    rule_result = chosen["rules"] if chosen else {}
+    rules = chosen["rules"] if chosen else {}
+    rec = {
+        "recommended_sql": chosen_sql,
+        "semantic": rules.get("semantic", {"label": "different", "confidence": 0.5, "rationale": "no viable candidate"}),
+        "performance": rules.get("performance", {"label": "unknown", "confidence": 0.5, "rationale": "no viable candidate"}),
+        "risk": rules.get("risk", {"label": "medium", "confidence": 0.5, "rationale": "no viable candidate"}),
+    }
+
     prompt = (
-        f"Original: {state['sql']}\n"
-        f"Modified: {chosen_sql}\n"
-        f"Rules: {json.dumps(rule_result, separators=(',', ':'))}\n"
-        'Reply ONLY JSON:\n'
-        '{"recommended_sql":"<sql>","semantic":{"label":"<equivalent|narrower|broader|different>"},'
-        '"performance":{"label":"<improves|degrades|neutral>"},'
-        '"risk":{"label":"<low|medium|high>"},"summary":"<1 sentence>"}'
+        f"Original: {state['sql']}\nModified: {chosen_sql}\n"
+        f"Semantic: {rec['semantic']['label']}, Performance: {rec['performance']['label']}, Risk: {rec['risk']['label']}\n"
+        "Summarize in one sentence why this change was recommended."
     )
     response = _llm(prompt, state)
-    state["recommendation"] = _parse_json(response)
-    if "recommended_sql" not in state["recommendation"]:
-        state["recommendation"]["recommended_sql"] = chosen_sql
+    rec["summary"] = response[:200]
+    state["recommendation"] = rec
     return state
 
 
 # -- Router -----------------------------------------------------------------
 
-def should_iterate(state: RecommendState) -> str:
-    if state["done"]:
-        return "llm_recommend"
-    return "llm_analyze_query"
-
-
-# -- Build Graph ------------------------------------------------------------
-
 def _build_pipeline():
     graph = StateGraph(RecommendState)
 
-    graph.add_node("llm_analyze_query", llm_analyze_query)
-    graph.add_node("python_generate_and_test", python_generate_and_test)
-    graph.add_node("llm_evaluate_results", llm_evaluate_results)
-    graph.add_node("llm_recommend", llm_recommend)
+    graph.add_node("analyze", llm_analyze_query)
+    graph.add_node("test", python_generate_and_test)
+    graph.add_node("evaluate", llm_evaluate_results)
+    graph.add_node("recommend", llm_recommend)
 
-    graph.set_entry_point("llm_analyze_query")
-    graph.add_edge("llm_analyze_query", "python_generate_and_test")
-    graph.add_edge("python_generate_and_test", "llm_evaluate_results")
-    graph.add_conditional_edges("llm_evaluate_results", should_iterate, {
-        "llm_analyze_query": "llm_analyze_query",
-        "llm_recommend": "llm_recommend",
-    })
-    graph.add_edge("llm_recommend", END)
+    graph.set_entry_point("analyze")
+    graph.add_edge("analyze", "test")
+    graph.add_edge("test", "evaluate")
+    graph.add_edge("evaluate", "recommend")
+    graph.add_edge("recommend", END)
 
     return graph.compile()
 

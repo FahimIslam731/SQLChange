@@ -45,15 +45,22 @@ def _print_result(result):
             equiv = c["equivalence"]
             print(f"\n  [{i}] {c['mutation_type']}")
             print(f"      SQL: {c['modified_sql'][:80]}...")
-            print(f"      Equiv: {equiv.get('output_relation', '?')}"
-                  f"  Rows: {equiv.get('row_count_original', '?')}"
-                  f" -> {equiv.get('row_count_modified', '?')}")
-            if "error" not in c.get("performance", {}):
-                large = c["performance"].get("large", {})
-                if large.get("speedup"):
-                    print(f"      Speedup: {large['speedup']:.2f}x"
-                          f" ({large.get('original_ms', 0):.2f}ms"
-                          f" -> {large.get('modified_ms', 0):.2f}ms)")
+            if equiv.get("error"):
+                print(f"      Equiv: ERROR -- {equiv['error'][:80]}")
+            else:
+                print(f"      Equiv: {equiv.get('output_relation', '?')}"
+                      f"  Rows: {equiv.get('row_count_original', '?')}"
+                      f" -> {equiv.get('row_count_modified', '?')}")
+            perf = c.get("performance", {})
+            if perf.get("error"):
+                print(f"      Perf:  ERROR -- {perf['error'][:80]}")
+            else:
+                for scale in ("small", "large"):
+                    s = perf.get(scale, {})
+                    if s.get("speedup"):
+                        print(f"      {scale:>5}: {s['speedup']:.2f}x"
+                              f"  ({s.get('original_ms', 0):.2f}ms"
+                              f" -> {s.get('modified_ms', 0):.2f}ms)")
             print(f"      Rules: semantic={c['rules']['semantic']['label']}"
                   f"  perf={c['rules']['performance']['label']}"
                   f"  risk={c['rules']['risk']['label']}")

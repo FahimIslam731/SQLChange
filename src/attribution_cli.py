@@ -17,7 +17,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from attribution import attribute_record, attribute_dataset, summarize_attributions, print_summary
+from attribution import attribute_record, attribute_batch, attribute_dataset, summarize_attributions, print_summary, print_report
 from mutation_engine import match_sql_to_mutation, mutation_function_mapping
 from parser import parse_sql, get_join_keys, get_where_details
 
@@ -94,13 +94,15 @@ def main():
         if not records:
             print("Error: No applicable mutations found for this query")
             sys.exit(1)
-        print(f"Generated {len(records)} mutations: {[r['mutation_type'] for r in records]}")
+        print(f"\nMutation Engine found {len(records)} applicable mutations:")
+        for i, r in enumerate(records):
+            print(f"  [{i+1}] {r['mutation_type']}")
+            print(f"      Original: {r['original_sql']}")
+            print(f"      Modified: {r['modified_sql']}")
+        print()
         results = []
         for r in records:
             results.append(attribute_record(r, args.provider, args.model, api_key))
-        if len(results) > 1:
-            summary = summarize_attributions(results)
-            print_summary(summary, len(results))
     elif args.record is not None:
         with open(args.input) as f:
             records = json.load(f)
@@ -108,12 +110,15 @@ def main():
         if args.record >= len(records):
             print(f"Error: Record {args.record} out of range (max {len(records) - 1})")
             sys.exit(1)
-        results = [attribute_record(records[args.record], args.provider, args.model, api_key)]
+        results = [attribute_record(records[args.record], args.provider, args.model, api_key, verbose=True)]
     else:
         with open(args.input) as f:
             records = json.load(f)
         print(f"Loaded {len(records)} records, analyzing {args.sample_size}...")
         results = attribute_dataset(records, args.sample_size, args.provider, args.model, api_key)
+
+    print_report(results)
+    if len(results) > 1:
         summary = summarize_attributions(results)
         print_summary(summary, len(results))
 
