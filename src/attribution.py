@@ -1,13 +1,13 @@
 """
 LLM-as-judge attribution analysis for SQL query modifications.
 
-Sends SQL query pairs to the LLM and asks it to judge which structural
-components (WHERE, JOIN, GROUP BY, SELECT columns, LIMIT) were most
-important to its semantic/performance/risk assessment.
+Runs each query pair through the full SQLChange execution pipeline
+(synthetic DB, equivalence check, performance benchmarking) then asks
+the LLM to judge which structural components drove its assessment —
+grounded in real execution evidence, not just raw SQL.
 
-Designed for Caliper — while this runs, observe the attention weights
-in Caliper's endpoint visualizer to see what the model actually attends to
-versus what it self-reports.
+Designed for Caliper — observe the attention weights in Caliper's
+endpoint visualizer while calls run.
 """
 
 import json
@@ -17,15 +17,59 @@ from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from graph_representer import llm_universal_call_utility
+from graph_representer import llm_universal_call_utility, build_graph
 from parser import parse_sql, get_join_keys, get_where_details
+from equivalence import check_equivalence
+from performance import compare_performance
+from reasoning_pipeline import _base_reasoning, _rule_signals
 
 COMPONENTS = ["WHERE", "JOIN", "GROUP_BY", "SELECT_COLUMNS", "LIMIT", "ORDER_BY"]
 
 DIMENSIONS = ("semantic", "performance", "risk")
 
 
-def _build_attribution_prompt(record: Dict[str, Any]) -> str:
+def _gather_execution_evidence(record: Dict[str, Any]) -> Dict[str, Any]:
+    """Run the query pair through synthetic DB for equivalence and performance."""
+    evidence = {}
+
+    print("  Running equivalence check...")
+    try:
+        equiv = check_equivalence(record, seed=42, rows_per_table=100)
+        evidence["equivalence"] = equiv
+        print(f"    Result: {equiv.get('output_relation', '?')}"
+              f"  rows: {equiv.get('row_count_original', '?')} -> {equiv.get('row_count_modified', '?')}")
+    except Exception as e:
+        evidence["equivalence"] = {"error": str(e)}
+        print(f"    Equivalence failed: {e}")
+
+    print("  Running performance benchmark...")
+    try:
+        perf = compare_performance(record, scales={"small": 50, "large": 1000},
+                                   repeats=5, seed=42)
+        evidence["performance"] = perf
+        for scale in ("small", "large"):
+            s = perf.get(scale, {})
+            if s.get("speedup"):
+                print(f"    {scale}: {s['speedup']:.2f}x"
+                      f"  ({s.get('original_ms', 0):.2f}ms -> {s.get('modified_ms', 0):.2f}ms)")
+    except Exception as e:
+        evidence["performance"] = {"error": str(e)}
+        print(f"    Performance failed: {e}")
+
+    print("  Computing rule-based labels...")
+    try:
+        rules = _base_reasoning(record)
+        evidence["rule_labels"] = {dim: rules[dim]["label"] for dim in DIMENSIONS}
+        print(f"    Rules: semantic={rules['semantic']['label']}"
+              f"  performance={rules['performance']['label']}"
+              f"  risk={rules['risk']['label']}")
+    except Exception as e:
+        evidence["rule_labels"] = {"error": str(e)}
+
+    return evidence
+
+
+def _build_attribution_prompt(record: Dict[str, Any], evidence: Dict[str, Any] = None) -> str:
     original = record.get("original_sql", "")
     modified = record.get("modified_sql", "")
     mutation_type = record.get("mutation_type", "unknown")
@@ -35,6 +79,26 @@ def _build_attribution_prompt(record: Dict[str, Any]) -> str:
         f"{t}({','.join(info.get('columns', []))})"
         for t, info in context.items()
     )
+
+    evidence_block = ""
+    if evidence:
+        parts = []
+        eq = evidence.get("equivalence", {})
+        if not eq.get("error"):
+            parts.append(f"Execution: {eq.get('output_relation','?')}, "
+                         f"rows {eq.get('row_count_original','?')}->{eq.get('row_count_modified','?')}")
+        perf = evidence.get("performance", {})
+        if not perf.get("error"):
+            for scale in ("small", "large"):
+                s = perf.get(scale, {})
+                if s.get("speedup"):
+                    parts.append(f"{scale}: {s['speedup']:.2f}x speedup "
+                                 f"({s.get('original_ms',0):.1f}ms->{s.get('modified_ms',0):.1f}ms)")
+        rules = evidence.get("rule_labels", {})
+        if not rules.get("error"):
+            parts.append(f"Rule labels: sem={rules.get('semantic','?')} "
+                         f"perf={rules.get('performance','?')} risk={rules.get('risk','?')}")
+        evidence_block = "\n".join(parts)
 
     return f"""SQL change analysis. Two tasks:
 
@@ -52,6 +116,7 @@ Mutation: {mutation_type}
 Schema: {schema_summary}
 Original: {original}
 Modified: {modified}
+{evidence_block}
 
 Return ONLY valid JSON (no markdown, no explanation):
 {{"classification":{{"semantic":"...","performance":"...","risk":"..."}},"attribution":{{"WHERE":{{"semantic":"high|medium|low|none","performance":"high|medium|low|none","risk":"high|medium|low|none"}},"JOIN":{{"semantic":"...","performance":"...","risk":"..."}},"GROUP_BY":{{"semantic":"...","performance":"...","risk":"..."}},"SELECT_COLUMNS":{{"semantic":"...","performance":"...","risk":"..."}},"LIMIT":{{"semantic":"...","performance":"...","risk":"..."}},"ORDER_BY":{{"semantic":"...","performance":"...","risk":"..."}}}}}}"""
@@ -81,14 +146,16 @@ def _importance_to_score(importance: str) -> int:
 
 def attribute_record(record: Dict[str, Any], provider: str = "caliper",
                      model: str = None, api_key: str = None) -> Dict[str, Any]:
-    """Run LLM-as-judge attribution on a single record."""
-    prompt = _build_attribution_prompt(record)
-
+    """Run execution pipeline then LLM-as-judge attribution on a single record."""
     print(f"\n{'='*60}")
     print(f"ATTRIBUTION: record {record.get('unique_id', '?')} | {record.get('mutation_type', '?')}")
     print(f"  Original: {record.get('original_sql', '')[:80]}...")
     print(f"  Modified: {record.get('modified_sql', '')[:80]}...")
-    print(f"  Calling {provider}...")
+
+    evidence = _gather_execution_evidence(record)
+
+    prompt = _build_attribution_prompt(record, evidence)
+    print(f"  Calling {provider} with execution evidence...")
 
     try:
         raw = llm_universal_call_utility(
@@ -120,6 +187,7 @@ def attribute_record(record: Dict[str, Any], provider: str = "caliper",
         "mutation_type": record.get("mutation_type"),
         "original_sql": record.get("original_sql"),
         "modified_sql": record.get("modified_sql"),
+        "execution_evidence": evidence,
         "classification": classification,
         "component_attribution": attributions,
         "raw_response": raw,
@@ -142,11 +210,29 @@ def _extract_importance(comp_data, dim):
 
 
 def _print_attribution(result: Dict[str, Any]):
-    """Print a terminal heatmap of component attributions."""
+    """Print execution evidence + component attribution heatmap."""
+    evidence = result.get("execution_evidence", {})
     attributions = result.get("component_attribution", {})
     classification = result.get("classification", {})
 
-    print(f"\n  Classification: semantic={classification.get('semantic', '?')}"
+    eq = evidence.get("equivalence", {})
+    if eq and not eq.get("error"):
+        print(f"\n  Execution: {eq.get('output_relation', '?')}"
+              f"  rows: {eq.get('row_count_original', '?')} -> {eq.get('row_count_modified', '?')}")
+    perf = evidence.get("performance", {})
+    if perf and not perf.get("error"):
+        for scale in ("small", "large"):
+            s = perf.get(scale, {})
+            if s.get("speedup"):
+                print(f"  {scale:>7}: {s['speedup']:.2f}x"
+                      f"  ({s.get('original_ms', 0):.2f}ms -> {s.get('modified_ms', 0):.2f}ms)")
+    rules = evidence.get("rule_labels", {})
+    if rules and not rules.get("error"):
+        print(f"  Rules:   semantic={rules.get('semantic', '?')}"
+              f"  performance={rules.get('performance', '?')}"
+              f"  risk={rules.get('risk', '?')}")
+
+    print(f"\n  LLM Classification: semantic={classification.get('semantic', '?')}"
           f"  performance={classification.get('performance', '?')}"
           f"  risk={classification.get('risk', '?')}")
 
