@@ -55,30 +55,52 @@ def llm_universal_call_utility(prompt: str, provider: str, api_key: str = None, 
     """
     response = None
     if provider in ("local", "caliper"):
+        import re
         import requests
+        import time
         port = 11435 if provider == "caliper" else 11434
         num_predict = kwargs.get("num_predict", 128)
         timeout = kwargs.get("timeout", 600)
         think = kwargs.get("think", True)
         opts = {"num_predict": num_predict}
+
+        resolved_model = model
+        if provider == "caliper" and not model:
+            try:
+                tags = requests.get(f"http://localhost:{port}/api/tags", timeout=5).json()
+                models = tags.get("models", [])
+                if models:
+                    resolved_model = models[0]["name"]
+            except Exception:
+                pass
+        resolved_model = resolved_model or "llama3"
+
         if provider == "caliper":
             body = {
-                "model": model or "llama3",
+                "model": resolved_model,
                 "messages": [{"role": "user", "content": prompt}],
                 "stream": False,
                 "options": opts
             }
             if not think:
                 body["think"] = False
-            r = requests.post(f"http://localhost:{port}/api/chat",
-                              json=body, timeout=timeout)
-            data = r.json()
-            if "error" in data:
-                raise RuntimeError(data["error"])
+            for attempt in range(3):
+                r = requests.post(f"http://localhost:{port}/api/chat",
+                                  json=body, timeout=timeout)
+                data = r.json()
+                if data.get("error") == "inference already in progress":
+                    print(f"  Caliper busy, retrying in 10s... ({attempt+1}/3)")
+                    time.sleep(10)
+                    continue
+                if "error" in data:
+                    raise RuntimeError(data["error"])
+                break
+            else:
+                raise RuntimeError("Caliper busy after 3 retries")
             response = data["message"]["content"]
         else:
             body = {
-                "model": model or "llama3",
+                "model": resolved_model,
                 "prompt": prompt,
                 "stream": False,
                 "options": opts
@@ -91,7 +113,6 @@ def llm_universal_call_utility(prompt: str, provider: str, api_key: str = None, 
             if "error" in data:
                 raise RuntimeError(data["error"])
             response = data["response"]
-        import re
         response = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
     elif provider == "anthropic":
         import anthropic
