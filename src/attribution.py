@@ -149,7 +149,7 @@ def attribute_record(record: Dict[str, Any], provider: str = "caliper",
         raw = llm_universal_call_utility(
             prompt=prompt, provider=provider,
             api_key=api_key, model=model,
-            num_predict=512
+            num_predict=512, think=False
         )
     except Exception as e:
         print(f"  LLM call failed: {e}")
