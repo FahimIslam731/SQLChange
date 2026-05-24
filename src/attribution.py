@@ -100,14 +100,6 @@ def _build_attribution_prompt(record: Dict[str, Any], evidence: Dict[str, Any] =
                          f"perf={rules.get('performance','?')} risk={rules.get('risk','?')}")
         evidence_block = "\n".join(parts)
 
-    template = ('{"classification":{"semantic":"...","performance":"...","risk":"..."},'
-                '"attribution":{"WHERE":{"semantic":"...","performance":"...","risk":"..."},'
-                '"JOIN":{"semantic":"...","performance":"...","risk":"..."},'
-                '"GROUP_BY":{"semantic":"...","performance":"...","risk":"..."},'
-                '"SELECT_COLUMNS":{"semantic":"...","performance":"...","risk":"..."},'
-                '"LIMIT":{"semantic":"...","performance":"...","risk":"..."},'
-                '"ORDER_BY":{"semantic":"...","performance":"...","risk":"..."}}}')
-
     return (f"Classify SQL change and rate component importance. JSON only, no explanation.\n\n"
             f"Mutation: {mutation_type} | Schema: {schema_summary}\n"
             f"Old: {original}\n"
@@ -115,7 +107,7 @@ def _build_attribution_prompt(record: Dict[str, Any], evidence: Dict[str, Any] =
             f"{evidence_block}\n"
             f"Classify: semantic=equivalent|narrower|broader|different, performance=improves|degrades|neutral|unknown, risk=low|medium|high\n"
             f"Rate each component importance: high|medium|low|none\n"
-            f"ONLY valid JSON:\n{template}")
+            f"Reply with JSON. Keys: classification (semantic,performance,risk), attribution (WHERE,JOIN,GROUP_BY,SELECT_COLUMNS,LIMIT,ORDER_BY each with semantic,performance,risk importance).")
 
 
 def _parse_response(raw: str) -> Dict[str, Any]:
