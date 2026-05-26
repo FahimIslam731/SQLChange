@@ -7,7 +7,7 @@ import json
 import os
 import sys
 
-from reasoning_pipeline import classify_dataset
+from reasoning_pipeline import classify_record
 
 
 def _resolve_api_key(provider, api_key):
@@ -18,6 +18,16 @@ def _resolve_api_key(provider, api_key):
     if provider == "openai":
         return os.environ.get("OPENAI_API_KEY")
     return ""
+
+
+def _gather_performance_evidence(record, repeats, scales):
+    """Run compare_performance() for one record; return evidence dict or error dict."""
+    try:
+        from performance import compare_performance
+        perf = compare_performance(record, scales=scales, repeats=repeats)
+        return {"performance": perf}
+    except Exception as exc:
+        return {"performance": None, "error": str(exc)}
 
 
 def main():
@@ -61,13 +71,46 @@ def main():
         default=None,
         help="Only label the first N records for quick demos",
     )
+    # Execution-evidence flags
+    parser.add_argument(
+        "--with-execution-evidence",
+        dest="with_execution_evidence",
+        action="store_true",
+        default=True,
+        help="Run synthetic-DB timing for each record and use it for performance labels (default: on)",
+    )
+    parser.add_argument(
+        "--no-execution-evidence",
+        dest="with_execution_evidence",
+        action="store_false",
+        help="Skip synthetic-DB timing; use static mutation-type rules only",
+    )
+    parser.add_argument(
+        "--performance-repeats",
+        type=int,
+        default=5,
+        help="Number of timing repeats per scale in compare_performance() (default: 5)",
+    )
+    parser.add_argument(
+        "--limit-records",
+        type=int,
+        default=None,
+        help="Alias for --sample-size; process only the first N records",
+    )
     args = parser.parse_args()
+
+    # --limit-records is an alias for --sample-size
+    if args.limit_records is not None and args.sample_size is None:
+        args.sample_size = args.limit_records
 
     if not os.path.exists(args.input):
         print(f"Error: input file not found: {args.input}")
         sys.exit(1)
     if args.sample_size is not None and args.sample_size < 0:
         print("Error: --sample-size must be zero or greater")
+        sys.exit(1)
+    if args.performance_repeats < 1:
+        print("Error: --performance-repeats must be at least 1")
         sys.exit(1)
 
     api_key = _resolve_api_key(args.provider, args.api_key)
@@ -85,13 +128,37 @@ def main():
         print("Error: input JSON must contain a list of records")
         sys.exit(1)
 
-    labeled_records = classify_dataset(
-        records,
-        provider=args.provider,
-        model=args.model,
-        api_key=api_key,
-        sample_size=args.sample_size,
-    )
+    selected = records[:args.sample_size] if args.sample_size is not None else records
+
+    perf_scales = {"small": 50, "medium": 500, "large": 5000}
+    labeled_records = []
+    exec_errors = 0
+
+    for i, record in enumerate(selected):
+        execution_evidence = None
+
+        if args.with_execution_evidence:
+            evidence = _gather_performance_evidence(
+                record, repeats=args.performance_repeats, scales=perf_scales
+            )
+            if evidence.get("error"):
+                exec_errors += 1
+                print(
+                    f"  [record {i}] execution evidence failed: {evidence['error'][:80]}",
+                    file=sys.stderr,
+                )
+            else:
+                execution_evidence = evidence
+
+        labeled = classify_record(
+            record,
+            provider=args.provider,
+            model=args.model,
+            api_key=api_key,
+            execution_evidence=execution_evidence,
+            use_execution_evidence=args.with_execution_evidence,
+        )
+        labeled_records.append(labeled)
 
     output_dir = os.path.dirname(args.output)
     if output_dir and not os.path.exists(output_dir):
@@ -101,6 +168,10 @@ def main():
         json.dump(labeled_records, f, indent=2, default=str)
 
     print(f"Labeled records: {len(labeled_records)}")
+    if args.with_execution_evidence:
+        print(f"Execution evidence gathered: {len(labeled_records) - exec_errors}/{len(labeled_records)}")
+        if exec_errors:
+            print(f"Execution errors (fell back to rules): {exec_errors}")
     print(f"Output written to: {args.output}")
 
 

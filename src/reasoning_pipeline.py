@@ -70,6 +70,98 @@ def _rule_signals(record: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _performance_label_from_evidence(execution_evidence: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Derive a performance label from timing evidence produced by compare_performance().
+
+    Uses the best available scale in priority order: large → medium → small.
+    speedup = original_ms / modified_ms  (> 1 means modified is faster).
+
+    Thresholds:
+        speedup >= 1.15  →  improves
+        speedup <= 0.85  →  degrades
+        otherwise        →  neutral
+        missing / error  →  unknown
+
+    Confidence is capped at "low" when both query times are under 0.05 ms
+    (SQLite in-memory noise floor dominates at that scale).
+    """
+    IMPROVE_THRESHOLD = 1.15
+    DEGRADE_THRESHOLD = 0.85
+    NOISE_FLOOR_MS = 0.05
+
+    perf = (execution_evidence or {}).get("performance") or {}
+
+    for scale in ("large", "medium", "small"):
+        scale_data = perf.get(scale)
+        if not isinstance(scale_data, dict):
+            continue
+        speedup = scale_data.get("speedup")
+        original_ms = scale_data.get("original_ms")
+        modified_ms = scale_data.get("modified_ms")
+
+        if speedup is None or not isinstance(speedup, (int, float)):
+            continue
+        if not isinstance(original_ms, (int, float)) or not isinstance(modified_ms, (int, float)):
+            continue
+
+        # Assign base confidence by scale
+        if scale == "large":
+            confidence = "high"
+        elif scale == "medium":
+            confidence = "medium"
+        else:
+            confidence = "low"
+
+        # Noise-floor guard: both queries too fast to measure reliably
+        if original_ms < NOISE_FLOOR_MS and modified_ms < NOISE_FLOOR_MS:
+            confidence = "low"
+
+        if speedup >= IMPROVE_THRESHOLD:
+            label = "improves"
+            reason = (
+                f"Modified query is {speedup:.2f}x faster than original at {scale} scale "
+                f"({original_ms:.3f}ms → {modified_ms:.3f}ms)."
+            )
+        elif speedup <= DEGRADE_THRESHOLD:
+            label = "degrades"
+            reason = (
+                f"Modified query is {speedup:.2f}x the speed of original at {scale} scale "
+                f"({original_ms:.3f}ms → {modified_ms:.3f}ms); performance worsened."
+            )
+        else:
+            label = "neutral"
+            reason = (
+                f"Speedup ratio {speedup:.2f} at {scale} scale is within the neutral band "
+                f"({original_ms:.3f}ms → {modified_ms:.3f}ms)."
+            )
+
+        return {
+            "label": label,
+            "confidence": confidence,
+            "reason": reason,
+            "signals": {
+                "scale_used": scale,
+                "speedup_used": round(speedup, 4),
+                "original_ms": round(original_ms, 4),
+                "modified_ms": round(modified_ms, 4),
+            },
+        }
+
+    # No usable timing data found
+    return {
+        "label": "unknown",
+        "confidence": "low",
+        "reason": "No valid timing evidence available; falling back to rule-based label.",
+        "signals": {
+            "scale_used": None,
+            "speedup_used": None,
+            "original_ms": None,
+            "modified_ms": None,
+        },
+    }
+
+
 def _base_reasoning(record: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     mutation_type = record.get("mutation_type")
     complexity = _complexity(record)
@@ -337,13 +429,36 @@ def classify_record(
     provider: str = "none",
     model: Optional[str] = None,
     api_key: Optional[str] = None,
+    execution_evidence: Optional[Dict[str, Any]] = None,
+    use_execution_evidence: bool = True,
 ) -> Dict[str, Any]:
-    """Return a labeled copy of one SQLChange mutation record."""
+    """Return a labeled copy of one SQLChange mutation record.
+
+    When execution_evidence is supplied and use_execution_evidence is True,
+    the performance label is derived from measured timing data via
+    _performance_label_from_evidence() instead of the static mutation-type rule.
+    All other labels and the LLM refinement path are unaffected.
+    """
     output = copy.deepcopy(record)
+    base_labels = _base_reasoning(record)
+
+    # Override performance label with execution evidence when available
+    perf_evidence_result = None
+    if use_execution_evidence and execution_evidence is not None:
+        perf_evidence_result = _performance_label_from_evidence(execution_evidence)
+        if perf_evidence_result["label"] != "unknown":
+            base_labels["performance"] = {
+                "label": perf_evidence_result["label"],
+                "confidence": {"high": 0.88, "medium": 0.72, "low": 0.55}.get(
+                    perf_evidence_result["confidence"], 0.55
+                ),
+                "rationale": perf_evidence_result["reason"],
+            }
+
     reasoning = {
         "method": "rules",
         "signals": _rule_signals(record),
-        "labels": _base_reasoning(record),
+        "labels": base_labels,
     }
     reasoning = _apply_llm_refinement(output, reasoning, provider, model, api_key)
 
@@ -351,6 +466,10 @@ def classify_record(
     output["performance_label"] = reasoning["labels"]["performance"]["label"]
     output["risk_label"] = reasoning["labels"]["risk"]["label"]
     output["reasoning"] = reasoning
+
+    if perf_evidence_result is not None:
+        output["performance_evidence"] = perf_evidence_result
+
     return output
 
 
