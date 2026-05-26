@@ -162,6 +162,139 @@ def _performance_label_from_evidence(execution_evidence: Dict[str, Any]) -> Dict
     }
 
 
+def _risk_rank(label: str) -> int:
+    return {"low": 0, "medium": 1, "high": 2}.get(label, 1)
+
+
+def _risk_from_rank(rank: int) -> str:
+    return {0: "low", 1: "medium", 2: "high"}.get(max(0, min(2, rank)), "medium")
+
+
+def _escalate_risk(base_risk: str, steps: int = 1) -> str:
+    return _risk_from_rank(_risk_rank(base_risk) + steps)
+
+
+def _risk_label_from_evidence(
+    record: Dict[str, Any],
+    base_risk: str,
+    execution_evidence: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Derive an evidence-adjusted risk label, escalating the static base_risk when
+    execution or ER-graph signals indicate elevated danger.
+
+    Escalation rules (each fires independently; total escalation is capped so the
+    result never exceeds "high"):
+
+    Rule A — output_relation is "different":
+        Escalate +1.  Query change produces structurally different rows; cross-table
+        side effects are more likely than the static rule assumes.
+
+    Rule B — row_count_delta is highly positive (modified returns >= 2x original rows):
+        Escalate +1.  Large row-count growth signals the modification broadens results
+        far more than expected; downstream consumers are at risk.
+
+    Rule C — execution error on at least one query (original or modified):
+        Escalate +1.  A query that fails at medium scale implies brittle SQL that may
+        break in production with real data.
+
+    Rule D — graph_depth >= 3:
+        Escalate +1.  Deep ER graphs indicate complex multi-hop relationships that
+        magnify the blast radius of any mutation.
+
+    Rule E — join_where_table_count >= 2:
+        Escalate +1.  Multiple joined tables involved in WHERE conditions create
+        implicit cross-table dependencies even when cross_table_risk is False.
+
+    Confidence:
+        "high"   if comparison data is present and both queries succeeded
+        "medium" if comparison data is present but a query errored, or no comparison
+                 but ER graph signals were available
+        "low"    otherwise (no comparison, no meaningful signals)
+    """
+    er_graph = _safe_er_graph(record)
+    graph_depth = er_graph.get("graph_depth", 0) or 0
+    join_where_table_count = len(er_graph.get("join_where_tables") or [])
+
+    comparison = (execution_evidence or {}).get("comparison") or {}
+    output_relation = comparison.get("output_relation")
+    row_count_original = comparison.get("row_count_original", 0) or 0
+    row_count_modified = comparison.get("row_count_modified", 0) or 0
+    original_error = comparison.get("original_error")
+    modified_error = comparison.get("modified_error")
+    both_succeeded = comparison.get("both_succeeded", False)
+    has_comparison = bool(output_relation)
+
+    escalation = 0
+    triggers = []
+
+    # Rule A
+    if output_relation == "different":
+        escalation += 1
+        triggers.append("output_relation=different")
+
+    # Rule B
+    if (
+        has_comparison
+        and both_succeeded
+        and row_count_original > 0
+        and row_count_modified >= row_count_original * 2
+    ):
+        escalation += 1
+        triggers.append(f"row_count_delta={row_count_modified - row_count_original} (2x growth)")
+
+    # Rule C
+    if has_comparison and (original_error or modified_error):
+        escalation += 1
+        triggers.append("execution_error")
+
+    # Rule D
+    if graph_depth >= 3:
+        escalation += 1
+        triggers.append(f"graph_depth={graph_depth}")
+
+    # Rule E
+    if join_where_table_count >= 2:
+        escalation += 1
+        triggers.append(f"join_where_table_count={join_where_table_count}")
+
+    final_label = _escalate_risk(base_risk, escalation)
+
+    # Confidence
+    if has_comparison and both_succeeded:
+        confidence = "high"
+    elif has_comparison or (graph_depth > 0 or join_where_table_count > 0):
+        confidence = "medium"
+    else:
+        confidence = "low"
+
+    if escalation > 0:
+        reason = (
+            f"Base risk '{base_risk}' escalated to '{final_label}' "
+            f"(+{escalation} step(s)) due to: {', '.join(triggers)}."
+        )
+    else:
+        reason = (
+            f"Base risk '{base_risk}' confirmed; no escalation triggers fired."
+        )
+
+    return {
+        "label": final_label,
+        "confidence": confidence,
+        "reason": reason,
+        "signals": {
+            "base_risk": base_risk,
+            "escalation_steps": escalation,
+            "triggers": triggers,
+            "output_relation": output_relation,
+            "row_count_original": row_count_original,
+            "row_count_modified": row_count_modified,
+            "graph_depth": graph_depth,
+            "join_where_table_count": join_where_table_count,
+        },
+    }
+
+
 def _base_reasoning(record: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     mutation_type = record.get("mutation_type")
     complexity = _complexity(record)
@@ -434,17 +567,22 @@ def classify_record(
 ) -> Dict[str, Any]:
     """Return a labeled copy of one SQLChange mutation record.
 
-    When execution_evidence is supplied and use_execution_evidence is True,
-    the performance label is derived from measured timing data via
-    _performance_label_from_evidence() instead of the static mutation-type rule.
-    All other labels and the LLM refinement path are unaffected.
+    When execution_evidence is supplied and use_execution_evidence is True:
+    - The performance label is derived from measured timing data via
+      _performance_label_from_evidence() instead of the static mutation-type rule.
+    - The risk label is adjusted by _risk_label_from_evidence(), which can
+      escalate the static base risk based on output_relation, row-count growth,
+      execution errors, graph_depth, and join_where_table_count.
+    Both overrides fall back to the static rule when evidence is absent or ambiguous.
     """
     output = copy.deepcopy(record)
     base_labels = _base_reasoning(record)
 
-    # Override performance label with execution evidence when available
     perf_evidence_result = None
+    risk_evidence_result = None
+
     if use_execution_evidence and execution_evidence is not None:
+        # Performance override
         perf_evidence_result = _performance_label_from_evidence(execution_evidence)
         if perf_evidence_result["label"] != "unknown":
             base_labels["performance"] = {
@@ -454,6 +592,17 @@ def classify_record(
                 ),
                 "rationale": perf_evidence_result["reason"],
             }
+
+        # Risk override
+        static_risk = base_labels["risk"]["label"]
+        risk_evidence_result = _risk_label_from_evidence(record, static_risk, execution_evidence)
+        base_labels["risk"] = {
+            "label": risk_evidence_result["label"],
+            "confidence": {"high": 0.88, "medium": 0.72, "low": 0.55}.get(
+                risk_evidence_result["confidence"], 0.55
+            ),
+            "rationale": risk_evidence_result["reason"],
+        }
 
     reasoning = {
         "method": "rules",
@@ -469,6 +618,8 @@ def classify_record(
 
     if perf_evidence_result is not None:
         output["performance_evidence"] = perf_evidence_result
+    if risk_evidence_result is not None:
+        output["risk_evidence"] = risk_evidence_result
 
     return output
 

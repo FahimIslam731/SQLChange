@@ -21,13 +21,39 @@ def _resolve_api_key(provider, api_key):
 
 
 def _gather_performance_evidence(record, repeats, scales):
-    """Run compare_performance() for one record; return evidence dict or error dict."""
+    """Run compare_performance() and run_query_pair() for one record.
+
+    Returns an evidence dict with up to two keys:
+      "performance"  — timing data from compare_performance() (may be None on error)
+      "comparison"   — output-relation data from run_query_pair() at medium scale
+                       (may be absent on error)
+
+    A top-level "error" key is set only when BOTH sub-tasks fail; partial failures
+    are noted per-key so the caller can still use whatever evidence succeeded.
+    """
+    evidence = {}
+    errors = []
+
     try:
         from performance import compare_performance
-        perf = compare_performance(record, scales=scales, repeats=repeats)
-        return {"performance": perf}
+        evidence["performance"] = compare_performance(record, scales=scales, repeats=repeats)
     except Exception as exc:
-        return {"performance": None, "error": str(exc)}
+        evidence["performance"] = None
+        errors.append(f"performance: {exc}")
+
+    try:
+        from synthetic_db import run_query_pair
+        pair_result = run_query_pair(record, seed=0, rows_per_table=500)
+        evidence["comparison"] = pair_result["comparison"]
+    except Exception as exc:
+        errors.append(f"comparison: {exc}")
+
+    if errors and evidence.get("performance") is None and "comparison" not in evidence:
+        evidence["error"] = "; ".join(errors)
+    elif errors:
+        evidence["partial_error"] = "; ".join(errors)
+
+    return evidence
 
 
 def main():
