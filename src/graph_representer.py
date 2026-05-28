@@ -54,17 +54,65 @@ def llm_universal_call_utility(prompt: str, provider: str, api_key: str = None, 
         for inferencing and getting response for prompts
     """
     response = None
-    if provider == "local":
+    if provider in ("local", "caliper"):
+        import re
         import requests
-        response = requests.post(
-            "http://localhost:11434/api/generate",
-            json={
-                "model": model or "llama3",
-                "prompt": prompt,
-                "stream": False
-            }
-        )
-        response = response.json()["response"]
+        port = 11435 if provider == "caliper" else 11434
+        num_predict = kwargs.get("num_predict", 128)
+        timeout = kwargs.get("timeout", 600)
+        think = kwargs.get("think", True)
+        opts = {"num_predict": num_predict, "temperature": 0.0}
+
+        resolved_model = model
+        if provider == "caliper" and not model:
+            try:
+                tags = requests.get(f"http://localhost:{port}/api/tags", timeout=5).json()
+                models = tags.get("models", [])
+                if models:
+                    resolved_model = models[0]["name"]
+            except Exception:
+                pass
+        resolved_model = resolved_model or "llama3"
+
+        abort_url = f"http://localhost:{port}/api/abort"
+
+        messages = [
+            {"role": "user", "content": prompt + " /no_think"},
+        ]
+
+        body = {
+            "model": resolved_model,
+            "messages": messages,
+            "stream": True,
+            "options": opts,
+            "think": False,
+        }
+        r = requests.post(f"http://localhost:{port}/api/chat",
+                          json=body, timeout=timeout, stream=True)
+        r.raise_for_status()
+        chunks = []
+        try:
+            for line in r.iter_lines():
+                if not line:
+                    continue
+                data = json.loads(line)
+                if "error" in data:
+                    raise RuntimeError(data["error"])
+                token = data.get("message", {}).get("content", "")
+                if token:
+                    chunks.append(token)
+                if data.get("done"):
+                    break
+        except KeyboardInterrupt:
+            r.close()
+            try:
+                requests.post(abort_url, timeout=5)
+            except Exception:
+                pass
+            print("\n  Generation aborted by user.")
+
+        response = "".join(chunks)
+        response = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
     elif provider == "anthropic":
         import anthropic
         # Initialize the client

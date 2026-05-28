@@ -1,0 +1,343 @@
+{
+  "results": [
+    {
+      "unique_id": 0,
+      "mutation_type": "join_swap",
+      "original_sql": "SELECT retailers.name FROM retailers LEFT JOIN retailer_products ON retailers.id = retailer_products.retailer_id LEFT JOIN products ON retailer_products.product = products.name WHERE products.is_local IS NULL AND retailers.country = 'Europe';",
+      "modified_sql": "SELECT retailers.name FROM retailers LEFT INNER JOIN retailer_products ON retailers.id = retailer_products.retailer_id LEFT JOIN products ON retailer_products.product = products.name WHERE products.is_local IS NULL AND retailers.country = 'Europe'",
+      "classification": {
+        "semantic": "broader",
+        "performance": "neutral",
+        "risk": "low"
+      },
+      "component_attribution": {
+        "WHERE": {
+          "semantic": "high",
+          "performance": "none",
+          "risk": "none"
+        },
+        "JOIN": {
+          "semantic": "medium",
+          "performance": "high",
+          "risk": "low"
+        }
+      },
+      "raw_response": "{\n  \"classification\": {\n    \"semantic\": \"broader\",\n    \"performance\": \"neutral\",\n    \"risk\": \"low\"\n  },\n  \"attribution\": {\n    \"WHERE\": {\"semantic\":\"high\",\"performance\":\"none\",\"risk\":\"none\"},\n    \"JOIN\":{\"semantic\":\"medium\",\"performance\":\"high\",\"risk\":\"low\"}\n  }\n}"
+    },
+    {
+      "unique_id": 1,
+      "mutation_type": "join_drop",
+      "original_sql": "SELECT retailers.name FROM retailers LEFT JOIN retailer_products ON retailers.id = retailer_products.retailer_id LEFT JOIN products ON retailer_products.product = products.name WHERE products.is_local IS NULL AND retailers.country = 'Europe';",
+      "modified_sql": "SELECT retailers.name FROM retailers LEFT JOIN retailer_products ON retailers.id = retailer_products.retailer_id WHERE products.is_local IS NULL AND retailers.country = 'Europe'",
+      "classification": {
+        "semantic": "broadener",
+        "performance": "improves",
+        "risk": "low"
+      },
+      "component_attribution": {
+        "WHERE": {
+          "semantic": "high",
+          "performance": "none",
+          "risk": "medium"
+        },
+        "JOIN": {
+          "semantic": "high",
+          "performance": "high",
+          "risk": "low"
+        }
+      },
+      "raw_response": "{\n  \"classification\": {\n    \"semantic\": \"broadener\",\n    \"performance\": \"improves\",\n    \"risk\": \"low\"\n  },\n  \"attribution\": {\n    \"WHERE\": {\"semantic\": \"high\", \"performance\": \"none\", \"risk\": \"medium\"},\n    \"JOIN\": {\"semantic\": \"high\", \"performance\": \"high\", \"risk\": \"low\"}\n  }\n}"
+    },
+    {
+      "unique_id": 2,
+      "mutation_type": "where_drop",
+      "original_sql": "SELECT retailers.name FROM retailers LEFT JOIN retailer_products ON retailers.id = retailer_products.retailer_id LEFT JOIN products ON retailer_products.product = products.name WHERE products.is_local IS NULL AND retailers.country = 'Europe';",
+      "modified_sql": "SELECT retailers.name FROM retailers LEFT JOIN retailer_products ON retailers.id = retailer_products.retailer_id LEFT JOIN products ON retailer_products.product = products.name WHERE products.is_local IS NULL",
+      "classification": {
+        "semantic": "broader",
+        "performance": "neutral",
+        "risk": "low"
+      },
+      "component_attribution": {
+        "WHERE": {
+          "semantic": "high",
+          "performance": "medium",
+          "risk": "medium"
+        },
+        "JOIN": {
+          "semantic": "none",
+          "performance": "none",
+          "risk": "none"
+        }
+      },
+      "raw_response": "{\n  \"classification\": {\n    \"semantic\": \"broader\",\n    \"performance\": \"neutral\",\n    \"risk\": \"low\"\n  },\n  \"attribution\": {\n    \"WHERE\": {\"semantic\": \"high\", \"performance\": \"medium\", \"risk\": \"medium\"},\n    \"JOIN\": {\"semantic\": \"none\", \"performance\": \"none\", \"risk\": \"none\"}\n  }\n}"
+    },
+    {
+      "unique_id": 3,
+      "mutation_type": "limit_add",
+      "original_sql": "SELECT retailers.name FROM retailers LEFT JOIN retailer_products ON retailers.id = retailer_products.retailer_id LEFT JOIN products ON retailer_products.product = products.name WHERE products.is_local IS NULL AND retailers.country = 'Europe';",
+      "modified_sql": "SELECT retailers.name FROM retailers LEFT JOIN retailer_products ON retailers.id = retailer_products.retailer_id LEFT JOIN products ON retailer_products.product = products.name WHERE products.is_local IS NULL AND retailers.country = 'Europe' LIMIT 100",
+      "classification": {
+        "semantic": "equivalent",
+        "performance": "improves",
+        "risk": "low"
+      },
+      "component_attribution": {
+        "WHERE": {
+          "semantic": "high",
+          "performance": "none",
+          "risk": "medium"
+        },
+        "JOIN": {
+          "semantic": "high",
+          "performance": "high",
+          "risk": "none"
+        },
+        "GROUP_BY": {
+          "semantic": "none",
+          "performance": "none",
+          "risk": "none"
+        },
+        "SELECT_COLUMNS": {
+          "semantic": "high",
+          "performance": "none",
+          "risk": "low"
+        },
+        "LIMIT": {
+          "semantic": "medium",
+          "performance": "high",
+          "risk": "low"
+        }
+      },
+      "raw_response": "{\n  \"classification\": {\n    \"semantic\": \"equivalent\",\n    \"performance\": \"improves\",\n    \"risk\": \"low\"\n  },\n  \"attribution\": {\n    \"WHERE\": {\"semantic\": \"high\", \"performance\": \"none\", \"risk\": \"medium\"},\n    \"JOIN\": {\"semantic\": \"high\", \"performance\": \"high\", \"risk\": \"none\"},\n    \"GROUP_BY\": {\"semantic\": \"none\", \"performance\": \"none\", \"risk\": \"none\"},\n    \"SELECT_COLUMNS\": {\"semantic\": \"high\", \"performance\": \"none\", \"risk\": \"low\"},\n    \"LIMIT\": {\"semantic\": \"medium\", \"performance\": \"high\", \"risk\": \"low\"}\n  }\n}"
+    },
+    {
+      "unique_id": 6,
+      "mutation_type": "column_drop",
+      "original_sql": "SELECT client_id, name, region, account_balance FROM (SELECT client_id, name, region, account_balance, DENSE_RANK() OVER (PARTITION BY region ORDER BY account_balance DESC) as rank FROM clients) AS ranked_clients WHERE rank = 1;",
+      "modified_sql": "SELECT client_id, name, region FROM (SELECT client_id, name, region, account_balance, DENSE_RANK() OVER (PARTITION BY region ORDER BY account_balance DESC) AS rank FROM clients) AS ranked_clients WHERE rank = 1",
+      "classification": {
+        "semantic": "narrower",
+        "performance": "neutral",
+        "risk": "low"
+      },
+      "component_attribution": {
+        "WHERE": {
+          "semantic": "high",
+          "performance": "medium",
+          "risk": "none"
+        },
+        "JOIN": {
+          "semantic": "none",
+          "performance": "none",
+          "risk": "none"
+        },
+        "GROUP_BY": {
+          "semantic": "none",
+          "performance": "none",
+          "risk": "none"
+        },
+        "SELECT_COLUMNS": {
+          "semantic": "high",
+          "performance": "medium",
+          "risk": "low"
+        },
+        "LIMIT": {
+          "semantic": "none",
+          "performance": "none",
+          "risk": "none"
+        },
+        "ORDER_BY": {
+          "semantic": "none",
+          "performance": "none",
+          "risk": "none"
+        }
+      },
+      "raw_response": "{\n  \"classification\": {\n    \"semantic\": \"narrower\",\n    \"performance\": \"neutral\",\n    \"risk\": \"low\"\n  },\n  \"attribution\": {\n    \"WHERE\": {\"semantic\": \"high\", \"performance\": \"medium\", \"risk\": \"none\"},\n    \"JOIN\": {\"semantic\": \"none\", \"performance\": \"none\", \"risk\": \"none\"},\n    \"GROUP_BY\": {\"semantic\": \"none\", \"performance\": \"none\", \"risk\": \"none\"},\n    \"SELECT_COLUMNS\": {\"semantic\": \"high\", \"performance\": \"medium\", \"risk\": \"low\"},\n    \"LIMIT\": {\"semantic\": \"none\", \"performance\": \"none\", \"risk\": \"none\"},\n    \"ORDER_BY\": {\"semantic\": \"none\", \"performance\": \"none\", \"risk\": \"none\"}\n  }\n}"
+    },
+    {
+      "unique_id": 14,
+      "mutation_type": "group_by_drop",
+      "original_sql": "SELECT region, AVG(workers) FROM hospitals GROUP BY region;",
+      "modified_sql": "SELECT region, workers FROM hospitals",
+      "classification": {
+        "semantic": "different",
+        "performance": "neutral",
+        "risk": "high"
+      },
+      "component_attribution": {
+        "WHERE": {
+          "semantic": "none",
+          "performance": "none",
+          "risk": "none"
+        },
+        "JOIN": {
+          "semantic": "none",
+          "performance": "none",
+          "risk": "none"
+        },
+        "GROUP_BY": {
+          "semantic": "high",
+          "performance": "low",
+          "risk": "medium"
+        },
+        "SELECT_COLUMNS": {
+          "semantic": "high",
+          "performance": "unknown",
+          "risk": "high"
+        },
+        "LIMIT": {
+          "semantic": "none",
+          "performance": "none",
+          "risk": "none"
+        },
+        "ORDER_BY": {
+          "semantic": "none",
+          "performance": "none",
+          "risk": "none"
+        }
+      },
+      "raw_response": "{\n\"classification\": {\n  \"semantic\": \"different\",\n  \"performance\": \"neutral\",\n  \"risk\": \"high\"\n},\n\"attribution\": {\n  \"WHERE\": {\"semantic\":\"none\",\"performance\":\"none\",\"risk\":\"none\"},\n  \"JOIN\": {\"semantic\":\"none\",\"performance\":\"none\",\"risk\":\"none\"},\n  \"GROUP_BY\": {\"semantic\":\"high\",\"performance\":\"low\",\"risk\":\"medium\"},\n  \"SELECT_COLUMNS\": {\"semantic\":\"high\",\"performance\":\"unknown\",\"risk\":\"high\"},\n  \"LIMIT\": {\"semantic\":\"none\",\"performance\":\"none\",\"risk\":\"none\"},\n  \"ORDER_BY\": {\"semantic\":\"none\",\"performance\":\"none\",\"risk\":\"none\"}\n}\n}"
+    }
+  ],
+  "summary": {
+    "WHERE": {
+      "semantic": {
+        "mean_score": 2.5,
+        "high_count": 5,
+        "medium_count": 0,
+        "low_count": 0,
+        "none_count": 1
+      },
+      "performance": {
+        "mean_score": 0.6666666666666666,
+        "high_count": 0,
+        "medium_count": 2,
+        "low_count": 0,
+        "none_count": 4
+      },
+      "risk": {
+        "mean_score": 1.0,
+        "high_count": 0,
+        "medium_count": 3,
+        "low_count": 0,
+        "none_count": 3
+      }
+    },
+    "JOIN": {
+      "semantic": {
+        "mean_score": 1.3333333333333333,
+        "high_count": 2,
+        "medium_count": 1,
+        "low_count": 0,
+        "none_count": 3
+      },
+      "performance": {
+        "mean_score": 1.5,
+        "high_count": 3,
+        "medium_count": 0,
+        "low_count": 0,
+        "none_count": 3
+      },
+      "risk": {
+        "mean_score": 0.3333333333333333,
+        "high_count": 0,
+        "medium_count": 0,
+        "low_count": 2,
+        "none_count": 4
+      }
+    },
+    "GROUP_BY": {
+      "semantic": {
+        "mean_score": 0.5,
+        "high_count": 1,
+        "medium_count": 0,
+        "low_count": 0,
+        "none_count": 5
+      },
+      "performance": {
+        "mean_score": 0.16666666666666666,
+        "high_count": 0,
+        "medium_count": 0,
+        "low_count": 1,
+        "none_count": 5
+      },
+      "risk": {
+        "mean_score": 0.3333333333333333,
+        "high_count": 0,
+        "medium_count": 1,
+        "low_count": 0,
+        "none_count": 5
+      }
+    },
+    "SELECT_COLUMNS": {
+      "semantic": {
+        "mean_score": 1.5,
+        "high_count": 3,
+        "medium_count": 0,
+        "low_count": 0,
+        "none_count": 3
+      },
+      "performance": {
+        "mean_score": 0.3333333333333333,
+        "high_count": 0,
+        "medium_count": 1,
+        "low_count": 0,
+        "none_count": 5
+      },
+      "risk": {
+        "mean_score": 0.8333333333333334,
+        "high_count": 1,
+        "medium_count": 0,
+        "low_count": 2,
+        "none_count": 3
+      }
+    },
+    "LIMIT": {
+      "semantic": {
+        "mean_score": 0.3333333333333333,
+        "high_count": 0,
+        "medium_count": 1,
+        "low_count": 0,
+        "none_count": 5
+      },
+      "performance": {
+        "mean_score": 0.5,
+        "high_count": 1,
+        "medium_count": 0,
+        "low_count": 0,
+        "none_count": 5
+      },
+      "risk": {
+        "mean_score": 0.16666666666666666,
+        "high_count": 0,
+        "medium_count": 0,
+        "low_count": 1,
+        "none_count": 5
+      }
+    },
+    "ORDER_BY": {
+      "semantic": {
+        "mean_score": 0.0,
+        "high_count": 0,
+        "medium_count": 0,
+        "low_count": 0,
+        "none_count": 6
+      },
+      "performance": {
+        "mean_score": 0.0,
+        "high_count": 0,
+        "medium_count": 0,
+        "low_count": 0,
+        "none_count": 6
+      },
+      "risk": {
+        "mean_score": 0.0,
+        "high_count": 0,
+        "medium_count": 0,
+        "low_count": 0,
+        "none_count": 6
+      }
+    }
+  }
+}
