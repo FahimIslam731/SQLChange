@@ -12,7 +12,7 @@ import random
 import re
 import sqlite3
 import time
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 
 UNSUPPORTED_SQL_PATTERNS = (
@@ -23,6 +23,20 @@ UNSUPPORTED_SQL_PATTERNS = (
     "INTERVAL ",
 )
 
+SQL_KEYWORDS = {
+    "ALL", "AND", "AS", "ASC", "BETWEEN", "BY", "CASE", "CAST", "CURRENT",
+    "CURRENT_DATE", "CURRENT_ROW", "DESC", "DISTINCT", "ELSE", "END", "FALSE",
+    "FOLLOWING", "FROM", "GROUP", "HAVING", "IN", "INNER", "IS", "JOIN",
+    "LEFT", "LIKE", "LIMIT", "NOT", "NULL", "ON", "OR", "ORDER", "OUTER",
+    "OVER", "PARTITION", "PRECEDING", "RANGE", "RIGHT", "ROWS", "SELECT",
+    "THEN", "TRUE", "UNBOUNDED", "WHEN", "WHERE", "WINDOW",
+}
+
+SQL_FUNCTIONS = {
+    "AVG", "COUNT", "DATE", "DENSE_RANK", "MAX", "MIN", "ROW_NUMBER", "SUM",
+    "YEAR",
+}
+
 
 def build_sqlite_db(
     record: Dict[str, Any],
@@ -30,6 +44,7 @@ def build_sqlite_db(
     rows_per_table: int = 50,
 ) -> sqlite3.Connection:
     """Create and populate an in-memory SQLite database for one record."""
+    record = prepare_record(record)
     context = _get_context(record)
     if not context:
         raise ValueError("record must include a non-empty context schema")
@@ -41,7 +56,12 @@ def build_sqlite_db(
     conn.row_factory = sqlite3.Row
 
     table_rows = _generate_table_rows(context, rows_per_table, rng)
-    _apply_join_values(table_rows, context, record.get("join_keys") or [], rows_per_table)
+    _apply_join_values(
+        table_rows,
+        context,
+        _get_join_keys(record),
+        rows_per_table,
+    )
     _apply_where_boundary_values(table_rows, context, record.get("where_details") or [])
 
     for table_name, table_info in context.items():
@@ -98,10 +118,13 @@ def run_query_pair(
     rows_per_table: int = 50,
 ) -> Dict[str, Any]:
     """Build a DB for a record and run original and modified SQL against it."""
+    record = prepare_record(record)
     conn = build_sqlite_db(record, seed=seed, rows_per_table=rows_per_table)
     try:
-        original = run_query(conn, record.get("original_sql") or "")
-        modified = run_query(conn, record.get("modified_sql") or "")
+        original_query = record.get("original_sql") or record.get("query") or ""
+        modified_query = record.get("modified_sql") or record.get("recommended_sql") or original_query
+        original = run_query(conn, original_query)
+        modified = run_query(conn, modified_query)
         comparison = compare_query_outputs(original, modified)
         return {
             "original": original,
@@ -178,8 +201,129 @@ def compare_query_outputs(original: Dict[str, Any], modified: Dict[str, Any]) ->
     }
 
 
+def prepare_record(record_or_query: Any) -> Dict[str, Any]:
+    """
+    Return a SQLChange-style record, inferring context when only SQL is present.
+
+    Accepted inputs:
+      - raw SQL string
+      - {"query": "..."}
+      - {"original_sql": "...", "modified_sql": "..."}
+      - existing records with explicit "context"
+    """
+    if isinstance(record_or_query, str):
+        record = {"query": record_or_query, "original_sql": record_or_query}
+    else:
+        record = dict(record_or_query or {})
+
+    query = record.get("query") or record.get("original_sql") or record.get("modified_sql")
+    if not record.get("context") and query:
+        inferred = infer_context_from_query(query)
+        record["context"] = inferred["context"]
+        record.setdefault("join_keys", inferred["join_keys"])
+        record.setdefault("where_details", inferred["where_details"])
+        record.setdefault("inference", inferred["inference"])
+    elif query:
+        record.setdefault("join_keys", infer_join_keys_from_query(query))
+        record.setdefault("where_details", infer_where_details_from_query(query, record.get("context") or {}))
+
+    return record
+
+
+def infer_context_from_query(query: str) -> Dict[str, Any]:
+    """Infer a minimal runnable schema, joins, and WHERE dependencies from SQL."""
+    tables, aliases = _extract_tables_and_aliases(query)
+    join_keys = infer_join_keys_from_query(query)
+    where_details = infer_where_details_from_query(query, {}, aliases)
+    table_columns = _extract_columns_by_table(query, tables, aliases, join_keys, where_details)
+    context = {}
+
+    for table_name in sorted(tables):
+        columns = sorted(table_columns.get(table_name) or {"id"})
+        context[table_name] = {
+            "columns": columns,
+            "types": {
+                column: _infer_type_for_column(column, query)
+                for column in columns
+            },
+        }
+
+    where_details = infer_where_details_from_query(query, context, aliases)
+    return {
+        "context": context,
+        "join_keys": join_keys,
+        "where_details": where_details,
+        "inference": {
+            "method": "synthetic_db_regex",
+            "source": "query",
+            "confidence": "medium" if context else "low",
+        },
+    }
+
+
+def infer_join_keys_from_query(query: str) -> List[Dict[str, str]]:
+    """Extract equality join keys from ON clauses using table aliases when present."""
+    tables, aliases = _extract_tables_and_aliases(query)
+    del tables
+    join_keys = []
+    for left_alias, left_column, right_alias, right_column in re.findall(
+        r"([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\.([A-Za-z_]\w*)",
+        _strip_string_literals(query),
+    ):
+        left_table = aliases.get(left_alias, left_alias)
+        right_table = aliases.get(right_alias, right_alias)
+        if left_table == right_table:
+            continue
+        join_keys.append({
+            "left_table": left_table,
+            "left_column": left_column,
+            "right_table": right_table,
+            "right_column": right_column,
+        })
+    return join_keys
+
+
+def infer_where_details_from_query(
+    query: str,
+    context: Dict[str, Any],
+    aliases: Optional[Dict[str, str]] = None,
+) -> List[Dict[str, str]]:
+    """Infer WHERE dependency entries from SQL text."""
+    aliases = aliases or _extract_tables_and_aliases(query)[1]
+    where_clause = _extract_where_clause(query)
+    if not where_clause:
+        return []
+
+    details = []
+    seen = set()
+    for qualifier, column in re.findall(r"(?:(\b[A-Za-z_]\w*)\.)?([A-Za-z_]\w*)", where_clause):
+        upper_column = column.upper()
+        if upper_column in SQL_KEYWORDS or upper_column in SQL_FUNCTIONS:
+            continue
+        table_name = aliases.get(qualifier) if qualifier else _table_for_unqualified_column(column, context)
+        table_name = table_name or "UNKNOWN"
+        key = (table_name, column)
+        if key in seen:
+            continue
+        seen.add(key)
+        details.append({
+            "condition": where_clause.strip(),
+            "table": table_name,
+            "column": column,
+        })
+    return details
+
+
 def _get_context(record: Dict[str, Any]) -> Dict[str, Any]:
     return record.get("context", record)
+
+
+def _get_join_keys(record: Dict[str, Any]) -> List[Dict[str, Any]]:
+    join_keys = record.get("join_keys") or []
+    if join_keys:
+        return join_keys
+    query = record.get("query") or record.get("original_sql") or ""
+    return infer_join_keys_from_query(query)
 
 
 def _sqlite_type(raw_type: str) -> str:
@@ -414,3 +558,139 @@ def _unmatched_value(value: Any, index: int) -> Any:
 
 def _canonical_rows(rows: Iterable[Dict[str, Any]]) -> List[Tuple[Tuple[str, Any], ...]]:
     return [tuple(sorted(row.items())) for row in rows]
+
+
+def _strip_string_literals(query: str) -> str:
+    return re.sub(r"'[^']*'", "''", query or "")
+
+
+def _extract_tables_and_aliases(query: str) -> Tuple[Set[str], Dict[str, str]]:
+    cleaned = _strip_string_literals(query)
+    tables: Set[str] = set()
+    aliases: Dict[str, str] = {}
+    table_pattern = re.compile(
+        r"\b(?:FROM|JOIN)\s+([A-Za-z_]\w*)"
+        r"(?:\s+(?:AS\s+)?(?!ON\b|WHERE\b|JOIN\b|LEFT\b|RIGHT\b|INNER\b|OUTER\b|GROUP\b|ORDER\b|LIMIT\b)([A-Za-z_]\w*))?",
+        re.IGNORECASE,
+    )
+    for table_name, alias in table_pattern.findall(cleaned):
+        tables.add(table_name)
+        aliases[table_name] = table_name
+        if alias:
+            aliases[alias] = table_name
+    return tables, aliases
+
+
+def _extract_columns_by_table(
+    query: str,
+    tables: Set[str],
+    aliases: Dict[str, str],
+    join_keys: List[Dict[str, str]],
+    where_details: List[Dict[str, str]],
+) -> Dict[str, Set[str]]:
+    cleaned = _strip_string_literals(query)
+    table_columns = {table: set() for table in tables}
+
+    for join_key in join_keys:
+        table_columns.setdefault(join_key["left_table"], set()).add(join_key["left_column"])
+        table_columns.setdefault(join_key["right_table"], set()).add(join_key["right_column"])
+
+    for where in where_details:
+        table_name = where.get("table")
+        column = where.get("column")
+        if table_name and table_name != "UNKNOWN" and column:
+            table_columns.setdefault(table_name, set()).add(column)
+
+    for qualifier, column in re.findall(r"\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)\b", cleaned):
+        table_name = aliases.get(qualifier)
+        if table_name:
+            table_columns.setdefault(table_name, set()).add(column)
+
+    unqualified_columns = _extract_unqualified_column_candidates(cleaned, tables, aliases)
+    if len(tables) == 1:
+        only_table = next(iter(tables))
+        table_columns.setdefault(only_table, set()).update(unqualified_columns)
+    elif tables:
+        # Query-only inference cannot always disambiguate unqualified columns.
+        # Assign them to the first referenced table so the query remains runnable.
+        first_table = next(iter(tables))
+        table_columns.setdefault(first_table, set()).update(unqualified_columns)
+
+    return table_columns
+
+
+def _extract_unqualified_column_candidates(
+    cleaned_query: str,
+    tables: Set[str],
+    aliases: Dict[str, str],
+) -> Set[str]:
+    without_qualified_refs = re.sub(r"\b[A-Za-z_]\w*\.[A-Za-z_]\w*\b", " ", cleaned_query)
+    candidates = set()
+    for token in re.findall(r"\b[A-Za-z_]\w*\b", without_qualified_refs):
+        upper_token = token.upper()
+        if upper_token in SQL_KEYWORDS or upper_token in SQL_FUNCTIONS:
+            continue
+        if token in tables or token in aliases:
+            continue
+        if re.search(rf"\b{re.escape(token)}\s*\(", without_qualified_refs):
+            continue
+        candidates.add(token)
+    return candidates
+
+
+def _extract_where_clause(query: str) -> str:
+    cleaned = _strip_string_literals(query)
+    match = re.search(
+        r"\bWHERE\b\s+(.*?)(?=\bGROUP\s+BY\b|\bORDER\s+BY\b|\bHAVING\b|\bLIMIT\b|$)",
+        cleaned,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if not match:
+        return ""
+    # Return the original clause slice approximately, preserving literal values
+    # for boundary inference.
+    original_match = re.search(
+        r"\bWHERE\b\s+(.*?)(?=\bGROUP\s+BY\b|\bORDER\s+BY\b|\bHAVING\b|\bLIMIT\b|$)",
+        query,
+        re.IGNORECASE | re.DOTALL,
+    )
+    return original_match.group(1).strip() if original_match else match.group(1).strip()
+
+
+def _table_for_unqualified_column(column: str, context: Dict[str, Any]) -> Optional[str]:
+    matches = _tables_with_column(context, column)
+    if len(matches) == 1:
+        return matches[0]
+    if len(context) == 1:
+        return next(iter(context.keys()))
+    return None
+
+
+def _infer_type_for_column(column: str, query: str) -> str:
+    column_lower = column.lower()
+    if column_lower == "id" or column_lower.endswith("_id") or column_lower.endswith("id"):
+        return "INT"
+    if any(token in column_lower for token in ("price", "amount", "balance", "salary", "revenue", "cost", "avg", "rate")):
+        return "DECIMAL"
+    if any(token in column_lower for token in ("date", "time", "created", "updated", "timestamp")):
+        return "DATE"
+    if column_lower.startswith(("is_", "has_", "provides_")) or column_lower in {"active", "enabled", "deleted"}:
+        return "BOOLEAN"
+
+    string_comparison = re.search(
+        rf"(?:\b\w+\.)?{re.escape(column)}\s*(?:=|LIKE)\s*'[^']*'",
+        query,
+        re.IGNORECASE,
+    )
+    if string_comparison:
+        return "TEXT"
+
+    numeric_comparison = re.search(
+        rf"(?:\b\w+\.)?{re.escape(column)}\s*(?:=|>=|<=|>|<)\s*[-+]?\d+(?:\.\d+)?",
+        query,
+        re.IGNORECASE,
+    )
+    if numeric_comparison:
+        return "DECIMAL" if "." in numeric_comparison.group(0) else "INT"
+
+    return "TEXT"

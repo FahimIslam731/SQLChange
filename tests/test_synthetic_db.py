@@ -7,10 +7,13 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 from synthetic_db import (  # noqa: E402
     build_sqlite_db,
     compare_query_outputs,
+    infer_context_from_query,
     normalize_sql_for_sqlite,
+    prepare_record,
     run_query,
     run_query_pair,
 )
+from performance import compare_performance  # noqa: E402
 
 
 def single_table_record():
@@ -144,6 +147,54 @@ class SyntheticDbTests(unittest.TestCase):
         different = {"rows": [{"id": 2}], "row_count": 1, "runtime_ms": 2.0, "error": None}
         self.assertEqual(compare_query_outputs(left, same)["output_relation"], "identical")
         self.assertEqual(compare_query_outputs(left, different)["output_relation"], "different")
+
+    def test_query_only_record_infers_context_and_runs_window_query(self):
+        query = (
+            "SELECT AVG(retail_price) OVER (ORDER BY sale_date ROWS BETWEEN 59 PRECEDING "
+            "AND CURRENT ROW) FROM sales WHERE strain_id = 11 AND state = 'Washington';"
+        )
+        record = prepare_record({"query": query})
+        self.assertIn("sales", record["context"])
+        self.assertEqual(record["context"]["sales"]["types"]["retail_price"], "DECIMAL")
+        self.assertEqual(record["context"]["sales"]["types"]["sale_date"], "DATE")
+        self.assertEqual(record["context"]["sales"]["types"]["strain_id"], "INT")
+        self.assertEqual(record["where_details"][0]["table"], "sales")
+
+        conn = build_sqlite_db(record, seed=0, rows_per_table=12)
+        try:
+            result = run_query(conn, query)
+            self.assertIsNone(result["error"])
+            self.assertGreater(result["row_count"], 0)
+        finally:
+            conn.close()
+
+    def test_query_only_record_infers_join_keys(self):
+        query = (
+            "SELECT users.name, orders.amount FROM users "
+            "JOIN orders ON users.id = orders.user_id WHERE orders.amount > 20"
+        )
+        inferred = infer_context_from_query(query)
+        self.assertIn("users", inferred["context"])
+        self.assertIn("orders", inferred["context"])
+        self.assertEqual(
+            inferred["join_keys"],
+            [{
+                "left_table": "users",
+                "left_column": "id",
+                "right_table": "orders",
+                "right_column": "user_id",
+            }],
+        )
+
+    def test_performance_wrapper_handles_query_only_records(self):
+        record = {
+            "query": "SELECT AVG(retail_price) FROM sales WHERE state = 'Washington'",
+        }
+        result = compare_performance(record, scales={"small": 10}, repeats=2)
+        self.assertIn("small", result)
+        self.assertEqual(result["small"]["original_errors"], [])
+        self.assertEqual(result["small"]["modified_errors"], [])
+        self.assertEqual(result["small"]["successful_original_runs"], 2)
 
 
 if __name__ == "__main__":
