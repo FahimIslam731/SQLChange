@@ -21,7 +21,7 @@ import json
 
 import pandas as pd
 
-import graph_representer as _gr
+import graph.graph_representer as _gr
 
 _real_llm = _gr.llm_universal_call_utility
 
@@ -34,13 +34,13 @@ def _llm_offline_safe(prompt, provider, api_key=None, model=None, **kwargs):
 
 _gr.llm_universal_call_utility = _llm_offline_safe
 
-from parser import parse_sql, get_join_keys, get_where_details
-from graph_representer import build_graph
-from equivalence import check_equivalence
-from performance import compare_performance
-from reasoning_pipeline import classify_record
-from recommend import recommend
-from attribution import attribute_record
+from parsing.parser import parse_sql, get_join_keys, get_where_details
+from graph.graph_representer import build_graph
+from execution.equivalence import check_equivalence
+from execution.performance import compare_performance
+from reasoning.reasoning_pipeline import classify_record
+from recommendation.recommend import recommend
+from attribution.attribution import attribute_record
 
 
 CSV_PATH = "../data/queries.csv"
