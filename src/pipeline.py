@@ -5,10 +5,10 @@
       1. Parse & extract (sqlglot AST traversal)
       2. DDL provided? → parse_sql() or infer_context_from_query()
       3. ER graph builder (table parser → join keys? → python/LLM → build graph)
-      4. Execution harness (build synthetic DB, time comparison)
-      5. Labeling pipeline (deterministic + LLM: performance, risk, semantic)
-      6. Recommend (LLM call 3 — suggest optimized query)
-      7. Iteration < N? (re-test loop)
+      4. Recommend (LLM generates optimized query)
+      5. Execution harness (build synthetic DB, test recommended vs original)
+      6. Labeling pipeline (deterministic + LLM: performance, risk, semantic)
+      7. Iteration < N? (loop back to recommend with label feedback)
       8. Final output (labels + recommendation)
 
     Uses Qwen 7B via Ollama by default.
@@ -572,19 +572,19 @@ def build_pipeline():
     graph.add_node("recommend", node_recommend)
     graph.add_node("final_output", node_final_output)
 
-    # Linear flow: parse → ER graph → execution → labeling → recommend
+    # Linear flow: parse → ER graph → recommend → execution → labeling
     graph.set_entry_point("parse_extract")
     graph.add_edge("parse_extract", "build_er_graph")
-    graph.add_edge("build_er_graph", "execution_harness")
+    graph.add_edge("build_er_graph", "recommend")
+    graph.add_edge("recommend", "execution_harness")
     graph.add_edge("execution_harness", "labeling_pipeline")
-    graph.add_edge("labeling_pipeline", "recommend")
 
     # Conditional: iterate or finish
     graph.add_conditional_edges(
-        "recommend",
+        "labeling_pipeline",
         should_iterate,
         {
-            "re_test": "execution_harness",   # Loop back: re-test with new recommended SQL
+            "re_test": "recommend",   # Loop back: LLM refines with label feedback
             "done": "final_output",
         },
     )
