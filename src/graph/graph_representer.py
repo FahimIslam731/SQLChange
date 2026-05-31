@@ -1,44 +1,35 @@
 """
     This python file creates a lang graph using the details from the original join keys,
-    ddl and where dependencies.
+    ddl and where dependencies. It handles the full pipeline from raw SQL input through
+    schema extraction (via DDL or inference) to building the entity relationship graph.
+
+    The pipeline first checks if DDL context is provided by the user. If DDL is available
+    it uses parse_sql() for 100% accurate schema extraction. If no DDL is provided it 
+    falls back to infer_context() which uses regex-based extraction with an LLM fallback
+    for ~85-90% accuracy.
+
+    The LLM utility has been extracted to utils/llm.py for shared access across modules.
+    Provider configuration (model, provider, api_key) is passed through the GraphState
+    instead of global variables for thread safety.
 
     Author: Dev Rathod
     Date: 05/13/2026
-    File Name: mutation_engine.py
+    File Name: graph_representer.py
 """
 
 import json
 from langgraph.graph import StateGraph, END
 from typing import TypedDict, Optional
 
-"""
-sql_mutated_pairs.append({
-                        "unique_id": len(sql_mutated_pairs),
-                        "source_id": int(rows["id"]),
-                        "domain": rows["domain"],
-                        "complexity": rows["sql_complexity"],
-                        "context": context,
-                        "original_sql": individual_sql_commands,
-                        "mutation_type": mutation,
-                        "modified_sql": modified_sql_query,
-                        "join_keys": join_keys,
-                        "where_details": where_details,
-                        "risk_label": None,
-                        "performance_label": None,
-                        "semantic_label": None
-                    })
-"""
+from utils.llm import llm_universal_call_utility
 
-# Global variable to store the cached comipled graph to prevent rebuilding
+# Global variable to store the cached compiled graph to prevent rebuilding
 _cached_graph = None
 
-# Global variable to store the model name, provider the api key
-_model_name = None
-_provider = None
-_api_key = None
-
-# Defining the shared state graph for join keys
+# Defining the shared state graph for the full pipeline
 class GraphState(TypedDict):
+    original_sql: str
+    ddl_context: Optional[str]
     join_keys: list
     where_details: list
     table_names: list
@@ -46,48 +37,64 @@ class GraphState(TypedDict):
     join_keys_relationships: list 
     sql_column_details: dict
     data_graph: dict
+    provider: str
+    model: Optional[str]
+    api_key: Optional[str]
+    inference_method: Optional[str]
     error: Optional[str]
 
-def llm_universal_call_utility(prompt: str, provider: str, api_key: str = None, model: str = None, **kwargs):
+def python_node_parse_ddl(state_graph: GraphState) -> GraphState:
     """
-        This python funciton is a universal utility to pick and choose different types of llms
-        for inferencing and getting response for prompts
+        Node 0a (DDL provided path)
+        This python function extracts the schema context from the DDL statements provided
+        by the user. Uses parse_sql() from the parsing module for 100% accurate schema
+        extraction. Additionally it extracts the join keys and where dependencies from the
+        original sql query for building the entity relationship graph.
     """
-    response = None
-    if provider == "local":
-        import requests
-        response = requests.post(
-            "http://localhost:11434/api/generate",
-            json={
-                "model": model or "llama3",
-                "prompt": prompt,
-                "stream": False
-            }
-        )
-        response = response.json()["response"]
-    elif provider == "anthropic":
-        import anthropic
-        # Initialize the client
-        client = anthropic.Anthropic(api_key=api_key)
-        response = client.messages.create(
-            model = model,
-            max_tokens = 1024,
-            messages=[{"role":"user", "content":prompt}]
-        )
-        response = response.content[0].text
-    elif provider == "openai":
-        from openai import OpenAI
-        client = OpenAI(api_key=api_key)
-        response = client.chat.completions.create(
-            model = model,
-            messages=[{"role": "user", "content": prompt}],
-            **kwargs
-        )
-        response = response.choices[0].message.content
-    else:
-        raise ValueError(f"Unknown LLM Provider: {provider}")
+    from parsing.parser import parse_sql, get_join_keys, get_where_details
 
-    return response
+    # Extracting the schema context from the DDL statements using the parser
+    context = parse_sql(state_graph["ddl_context"])
+
+    # Getting all the join keys relationships for the sql query
+    join_keys = get_join_keys(state_graph["original_sql"])
+
+    # Getting all the where dependencies inside the sql query
+    where_details = get_where_details(state_graph["original_sql"])
+
+    # Storing the extracted information in the state graph
+    state_graph["sql_column_details"] = context
+    state_graph["join_keys"] = join_keys
+    state_graph["where_details"] = where_details
+    state_graph["inference_method"] = "ddl_parse"
+
+    return state_graph
+
+def python_node_infer_context(state_graph: GraphState) -> GraphState:
+    """
+        Node 0b (No DDL path)
+        This python function infers the schema context directly from the SQL query when
+        no DDL is provided by the user. It first attempts regex-based extraction for speed
+        and falls back to LLM inference if the regex extraction returns low confidence or
+        empty context. The fallback uses the provider configuration from the state graph.
+    """
+    from parsing.infer_context import infer_context
+
+    # Inferring the schema context from the sql query using regex with LLM fallback
+    inferred = infer_context(
+        sql=state_graph["original_sql"],
+        provider=state_graph["provider"],
+        model=state_graph.get("model"),
+        api_key=state_graph.get("api_key"),
+    )
+
+    # Storing the inferred context and extracted relationships in the state graph
+    state_graph["sql_column_details"] = inferred.get("context", {})
+    state_graph["join_keys"] = inferred.get("join_keys", [])
+    state_graph["where_details"] = inferred.get("where_details", [])
+    state_graph["inference_method"] = inferred.get("inference", {}).get("method", "inferred")
+
+    return state_graph
 
 def python_node_table_parsor(state_graph: GraphState) -> GraphState:
     """
@@ -96,6 +103,7 @@ def python_node_table_parsor(state_graph: GraphState) -> GraphState:
         table names present in the database. Always innvoked, regardless of the path
         the input has been taken in.
     """
+    # Extracting the table names from the sql column details dictionary keys
     tables = list(state_graph["sql_column_details"].keys())
     state_graph["table_names"] = tables
     return state_graph
@@ -105,18 +113,18 @@ def python_node_build_graph_join_keys(state_graph: GraphState) -> GraphState:
         Node 2 (part a: Python function)
         This python function builds the relationships from the extracted join keys. The
         function only runs if the join keys are available for the particular entry and no
-        LLM call is needed. This node is the path for queires that have join conditions
-        present in them
+        LLM call is needed. This node is the path for queries that have join conditions
+        present in them.
     """
     # Variable to store the join key information
     join_keys = state_graph["join_keys"]
-    # Variable store the relationships between the join keys
+    # Variable to store the relationships between the join keys
     join_keys_relationships = []
 
-    # Iterating throuh each join keys present in the entry
+    # Iterating through each join keys present in the entry
     for join_key_entry in join_keys:
         join_keys_relationships.append({
-            "source":  join_key_entry["left_table"],
+            "source":      join_key_entry["left_table"],
             "target":      join_key_entry["right_table"],
             "join_column": join_key_entry["left_column"],
             "confidence":  "high",
@@ -131,16 +139,12 @@ def python_node_build_graph_join_keys(state_graph: GraphState) -> GraphState:
 def llm_node_build_relationships(state_graph: GraphState) -> GraphState:
     """
         Node 2 (part b: LLM inference)
-        This function utilizes an large language model for inferance for finding relationships
-        between tables where no join keys exists. This function only runs when no join keys are
+        This function utilizes a large language model for inference for finding relationships
+        between tables where no join keys exist. This function only runs when no join keys are
         associated with a sql entry.
     """
-    # Global variables to store the model name and the API key for inference
-    global _model_name
-    global _api_key
-
     try:
-        # Fetching all the available sql context from the individual query and tranforming it into a json entry
+        # Fetching all the available sql context from the individual query and transforming it into a json entry
         sql_context = state_graph["sql_column_details"]
         sql_context = json.dumps(sql_context, indent=2)
 
@@ -161,12 +165,18 @@ def llm_node_build_relationships(state_graph: GraphState) -> GraphState:
                 }}
             ]
             }}
-            If no relationships to the table are found repond {{"table_relationships":[]}}
+            If no relationships to the table are found respond {{"table_relationships":[]}}
         """
 
-        # Getting the response for the prompt from the LLM
-        response = llm_universal_call_utility(prompt=prompt, provider=_provider, api_key=_api_key, model=_model_name)
-        # If the response form the llm is none log the error
+        # Getting the response for the prompt from the LLM using the provider config from state
+        response = llm_universal_call_utility(
+            prompt=prompt,
+            provider=state_graph["provider"],
+            api_key=state_graph.get("api_key"),
+            model=state_graph.get("model"),
+        )
+
+        # If the response from the llm is none log the error
         if response is None:
             state_graph["table_relationships"] = []
             state_graph["error"] = "Error while getting a response from LLM"
@@ -196,14 +206,14 @@ def node_build_graph(state_graph: GraphState) -> GraphState:
         output.
 
         Input:  state["tables"] + state["join_keys_relationships"] + state["where_details"]
-        Output: state["er_graph"] complete graph dict
+        Output: state["data_graph"] complete graph dict
     """
     # Variables to store all the details to build the level of importance graph
     join_key_relationships = state_graph["join_keys_relationships"]
     where_details = state_graph["where_details"]
     tables = state_graph["table_names"]
 
-    # Fetching all the source and target tables in seperate vectiors 
+    # Fetching all the source and target tables in seperate vectors 
     target_tables = {}
     all_tables = set()
     for relationship in join_key_relationships:
@@ -217,7 +227,7 @@ def node_build_graph(state_graph: GraphState) -> GraphState:
             all_tables.add(relationship["source"])
 
     # Determining the level of imporatance as:
-    # root: if the chain is stated from this table
+    # root: if the chain is started from this table
     # intermidiate: if the table has both source and target relationships
     # leaf: if the table has only target relationships and not source relationships
     table_imporatance = []
@@ -234,12 +244,13 @@ def node_build_graph(state_graph: GraphState) -> GraphState:
     # Finding all the table entries in the join statements
     all_joined_tables = set()
     for relationship in join_key_relationships:
-        all_joined_tables.add(relationship["target"])
+        if relationship.get("target"):
+            all_joined_tables.add(relationship["target"])
 
     # Finding all the cross table entries present in join relationships and where tables
     table_join_where_entries = []
     for where in where_details:
-        if where["table"] in all_joined_tables:
+        if where.get("table") in all_joined_tables:
             table_join_where_entries.append(where)
 
     # Building a graph entry in a dictonary data variable
@@ -257,10 +268,24 @@ def node_build_graph(state_graph: GraphState) -> GraphState:
 
     return state_graph
 
-def route_post_parsing_details(state_graph: GraphState) -> GraphState:
+def route_ddl_or_infer(state_graph: GraphState) -> str:
     """
-        This function is a conditional node which route's the input for node 2.
-        If join relationships are present, the inputs takes the path with node 2 (python)
+        This function is a conditional node which routes the input for the initial
+        schema extraction step. If DDL context is provided by the user, the input takes
+        the path with parse_sql() for accurate extraction. If no DDL is provided it falls
+        back to infer_context() which uses regex extraction with LLM fallback.
+    """
+    # If DDL context is provided and not empty then use the parse_sql path
+    # Otherwise fall back to inferring the context from the query itself
+    if state_graph.get("ddl_context") and state_graph["ddl_context"].strip():
+        return "python_node_parse_ddl"
+    else:
+        return "python_node_infer_context"
+
+def route_post_parsing_details(state_graph: GraphState) -> str:
+    """
+        This function is a conditional node which routes the input for node 2.
+        If join relationships are present, the input takes the path with node 2 (python)
         else it calls LLM to infer the relationship.
     """
     # If join keys is not present then make a LLM API call for building relationships else
@@ -270,30 +295,47 @@ def route_post_parsing_details(state_graph: GraphState) -> GraphState:
     else:
         return "llm_node_build_relationships"
 
-def build_graph_pipleine():
+def build_graph_pipeline():
     """
-        This python funciton creates a layout for all the nodes and edges to form a
-        graph, inorder to transverse through all the original and mutated queries in the 
-        dataset
+        This python function creates a layout for all the nodes and edges to form a
+        graph, inorder to transverse through all the queries in the pipeline. The graph
+        now includes the initial DDL routing step before the ER graph construction.
     """
-    # Initialising a lang graph state graph to build the inference pipeline
+    # Initialising a lang graph state graph to build the full pipeline
     graph = StateGraph(GraphState)
 
-    # Adding all the nodes to the graph
+    # Adding the DDL routing nodes to the graph
+    graph.add_node("python_node_parse_ddl", python_node_parse_ddl)
+    graph.add_node("python_node_infer_context", python_node_infer_context)
+
+    # Adding all the ER graph building nodes to the graph
     graph.add_node("python_node_table_parsor", python_node_table_parsor)
     graph.add_node("python_node_build_graph_join_keys", python_node_build_graph_join_keys)
     graph.add_node("llm_node_build_relationships", llm_node_build_relationships)
     graph.add_node("node_build_graph", node_build_graph)
 
-    # Setting the entry point
-    graph.set_entry_point("python_node_table_parsor")
+    # Setting the entry point to the DDL routing conditional
+    graph.set_entry_point("route_ddl_or_infer")
+    graph.add_node("route_ddl_or_infer", lambda state: state)
 
-    # Adding conditional edges to the lang graph after the entry point
+    # Adding conditional edges for the DDL routing after the entry point
+    graph.add_conditional_edges("route_ddl_or_infer", route_ddl_or_infer,
+                                {
+                                    "python_node_parse_ddl": "python_node_parse_ddl",
+                                    "python_node_infer_context": "python_node_infer_context"
+                                })
+
+    # Both DDL paths converge into the table parser node
+    graph.add_edge("python_node_parse_ddl", "python_node_table_parsor")
+    graph.add_edge("python_node_infer_context", "python_node_table_parsor")
+
+    # Adding conditional edges to the lang graph after the table parser
     graph.add_conditional_edges("python_node_table_parsor", route_post_parsing_details,
                                 {
                                     "python_node_build_graph_join_keys": "python_node_build_graph_join_keys",
                                     "llm_node_build_relationships": "llm_node_build_relationships"
                                 })
+
     # Adding the linear edges to building the final graph
     graph.add_edge("python_node_build_graph_join_keys", "node_build_graph")
     graph.add_edge("llm_node_build_relationships", "node_build_graph")
@@ -303,32 +345,34 @@ def build_graph_pipleine():
 
     return graph.compile()
 
-def build_graph(context: dict, join_keys: list, where_details: list, model_name: str, provider: str, api_key: str) -> dict:
+def build_graph(original_sql: str, ddl_context: str = None, model_name: str = None, provider: str = "qwen", api_key: str = None) -> dict:
     """
-        This python function is the main entry point to the program which is called by dataset.py.
-        Additionally we would also cache the graph inorder to prevent it from rebuilding each time.
+        This python function is the main entry point to the program which is called by
+        other modules in the pipeline. It takes the raw SQL query and optional DDL context
+        and runs the full pipeline from schema extraction through ER graph construction.
+        Additionally we would also cache the graph inorder to prevent it from rebuilding
+        each time.
     """
     global _cached_graph
-    global _model_name
-    global _api_key
-    global _provider
-
-    _model_name = model_name
-    _api_key = api_key
-    _provider = provider
 
     if _cached_graph is None:
-        _cached_graph = build_graph_pipleine()
+        _cached_graph = build_graph_pipeline()
 
-    # Running the langgraph for each query element
+    # Running the langgraph for the query element through the full pipeline
     langgraph_output = _cached_graph.invoke({
-        "sql_column_details": context,
-        "join_keys": join_keys,
-        "where_details": where_details,
+        "original_sql": original_sql,
+        "ddl_context": ddl_context,
+        "join_keys": [],
+        "where_details": [],
         "table_names": [],
         "table_relationships": [],
         "join_keys_relationships": [],
+        "sql_column_details": {},
         "data_graph": {},
+        "provider": provider,
+        "model": model_name,
+        "api_key": api_key,
+        "inference_method": None,
         "error": None
     })
 
