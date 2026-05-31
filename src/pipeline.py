@@ -98,6 +98,7 @@ def node_parse_extract(state: dict) -> dict:
 
     ddl = state.get("ddl_context", "")
     sql = state["original_sql"]
+    print("[pipeline] Stage 1/6: Parsing SQL...")
 
     if ddl and ddl.strip():
         # DDL provided → 100% accurate schema extraction
@@ -156,6 +157,7 @@ def node_build_er_graph(state: dict) -> dict:
     context = state.get("sql_column_details", {})
     join_keys = state.get("join_keys", [])
     where_details = state.get("where_details", [])
+    print("[pipeline] Stage 2/6: Building ER graph...")
 
     # Extract table names
     tables = list(context.keys())
@@ -257,6 +259,8 @@ def node_execution_harness(state: dict) -> dict:
     from execution.equivalence import check_equivalence
     from execution.performance import compare_performance
 
+    print(f"[pipeline] Stage 4/6: Testing recommended query on synthetic data...")
+
     original_sql = state["original_sql"]
     recommended_sql = state.get("recommended_sql", "")
 
@@ -312,6 +316,11 @@ def node_execution_harness(state: dict) -> dict:
         "runtime_ratio": equiv.get("comparison", {}).get("runtime_ratio"),
     }
 
+    large_spd = perf.get("large", {}).get("speedup", "?") if isinstance(perf, dict) else "error"
+    print(f"[pipeline]   -> relation={evidence['output_relation']}, "
+          f"rows={evidence['row_count_original']}→{evidence['row_count_modified']}, "
+          f"speedup={large_spd}x")
+
     _log(state, "execution_harness", {
         "output_relation": evidence["output_relation"],
         "row_counts": f"{evidence['row_count_original']} → {evidence['row_count_modified']}",
@@ -340,6 +349,8 @@ def node_labeling_pipeline(state: dict) -> dict:
     from reasoning.performance_labeler import classify_performance
     from reasoning.risk_labeler import classify_risk
     from reasoning.semantic_labeler import classify_semantic
+
+    print("[pipeline] Stage 5/6: Labeling (performance, risk, semantic)...")
 
     original_sql = state["original_sql"]
     recommended_sql = state.get("recommended_sql", original_sql)
@@ -380,6 +391,10 @@ def node_labeling_pipeline(state: dict) -> dict:
         api_key=api_key,
     )
 
+    print(f"[pipeline]   -> perf={perf_label.get('label')}({perf_label.get('score')}), "
+          f"risk={risk_label_result.get('label')}({risk_label_result.get('score')}), "
+          f"semantic={sem_label.get('label')}")
+
     _log(state, "labeling_pipeline", {
         "performance": {"score": perf_label.get("score"), "label": perf_label.get("label")},
         "risk": {"score": risk_label_result.get("score"), "label": risk_label_result.get("label")},
@@ -404,6 +419,9 @@ def node_recommend(state: dict) -> dict:
     """
     from recommendation.recommend import recommend_query
 
+    iteration = state.get("iteration", 0)
+    print(f"[pipeline] Stage 3/6: LLM generating optimized query (iteration {iteration + 1})...")
+
     original_sql = state["original_sql"]
     recommendation = recommend_query(
         original_sql=original_sql,
@@ -423,6 +441,10 @@ def node_recommend(state: dict) -> dict:
     rec_sql = recommendation.get("recommended_sql", original_sql)
     if not rec_sql or not rec_sql.strip():
         rec_sql = original_sql
+
+    action = recommendation.get("action", "?")
+    score = recommendation.get("score", "?")
+    print(f"[pipeline]   -> action={action}, score={score}/10, valid={recommendation.get('is_valid', '?')}")
 
     # Track iteration history
     history = state.get("iteration_history", [])
@@ -484,6 +506,7 @@ def should_iterate(state: dict) -> str:
     max_iter = state.get("max_iterations", 3)
 
     if iteration >= max_iter:
+        print(f"[pipeline] Stopping: reached max iterations ({max_iter})")
         _log(state, "iteration_check", {"decision": "STOP", "reason": f"Reached max iterations ({max_iter})"})
         return "done"
 
@@ -493,11 +516,13 @@ def should_iterate(state: dict) -> str:
 
     # Stop if recommendation says keep_original
     if recommendation.get("action") == "keep_original":
+        print("[pipeline] Stopping: LLM says keep original")
         _log(state, "iteration_check", {"decision": "STOP", "reason": "Action is keep_original"})
         return "done"
 
     # Stop if not valid SQL
     if not recommendation.get("is_valid", False):
+        print("[pipeline] Stopping: recommended SQL is invalid")
         _log(state, "iteration_check", {"decision": "STOP", "reason": "Recommended SQL is invalid"})
         return "done"
 
@@ -505,10 +530,12 @@ def should_iterate(state: dict) -> str:
     perf_score = perf_label.get("score", 5)
     risk_score = risk_label.get("score", 5)
     if perf_score >= 8 and risk_score <= 3:
+        print(f"[pipeline] Stopping: already optimal (perf={perf_score}, risk={risk_score})")
         _log(state, "iteration_check", {"decision": "STOP", "reason": f"Already optimal (perf={perf_score}, risk={risk_score})"})
         return "done"
 
     # Continue iterating — there's room for improvement
+    print(f"[pipeline] Iterating: room to improve (perf={perf_score}, risk={risk_score}, iter {iteration}/{max_iter})")
     _log(state, "iteration_check", {
         "decision": "CONTINUE",
         "reason": f"Room to improve (perf={perf_score}, risk={risk_score}, iter={iteration}/{max_iter})",
@@ -524,6 +551,7 @@ def node_final_output(state: dict) -> dict:
     """
     Assemble the final output: labels + recommendation + best result.
     """
+    print("[pipeline] Stage 6/6: Assembling final output...")
     best = state.get("best_result", {})
     recommendation = state.get("recommendation", {})
 
