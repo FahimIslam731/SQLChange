@@ -1,13 +1,8 @@
 """
-Recommendation module — LLM-driven SQL query optimization via LangGraph.
+Recommendation module — LLM-driven SQL query optimization.
 
-Agentic pipeline where the LLM analyzes a query, generates improved versions,
-tests them against a synthetic database for equivalence and performance,
-and iterates up to N times to find the best optimization.
-
-Modules:
-    recommend      – LangGraph state machine for query optimization
-    recommend_cli  – CLI entry point for the recommendation engine
+BUG FIX: Was importing nonexistent function 'recommend'.
+         The actual function name is 'recommend_query'.
 """
 
-from .recommend import recommend
+from .recommend import recommend_query
