@@ -2,15 +2,21 @@
     Universal LLM call utility supporting Anthropic, OpenAI, and local (Ollama).
     
     Providers:
-      - "local" or "qwen" or "ollama": routes to Ollama at localhost:11435
+      - "local" or "qwen" or "ollama": routes to Ollama at 127.0.0.1:11435
       - "anthropic": uses the Anthropic SDK
       - "openai": uses the OpenAI SDK]
 """
 
 import json
+import re
 
-# Ollama-compatible providers 
+# Ollama-compatible providers
 _OLLAMA_PROVIDERS = {"local", "qwen", "ollama"}
+
+
+def _strip_thinking(text: str) -> str:
+    """Remove <think>...</think> blocks from thinking-model responses."""
+    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 
 def llm_universal_call_utility(
@@ -46,15 +52,15 @@ def llm_universal_call_utility(
 
         try:
             resp = requests.post(
-                "http://localhost:11435/api/generate",
+                "http://127.0.0.1:11435/api/generate",
                 json=payload,
-                timeout=120,
+                timeout=300,
             )
             resp.raise_for_status()
             response = resp.json()["response"]
         except requests.exceptions.ConnectionError:
             raise ConnectionError(
-                "Cannot connect to Ollama at localhost:11435. "
+                "Cannot connect to Ollama at 127.0.0.1:11435. "
                 "Make sure Ollama is running: `ollama serve`"
             )
         except Exception as e:
@@ -90,4 +96,4 @@ def llm_universal_call_utility(
             f"Supported: {sorted(_OLLAMA_PROVIDERS | {'anthropic', 'openai'})}"
         )
 
-    return response
+    return _strip_thinking(response)

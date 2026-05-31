@@ -66,8 +66,8 @@ ORDER BY e.salary DESC
 #   --ddl         schema so parser gets 100% accurate extraction
 #   --iterations  3 passes to refine the optimization
 #   --model       your local Ollama model
-python cli.py \
+python3 cli.py \
   --ddl "$DDL" \
   --iterations 3 \
-  --model qwen2.5-coder:7b \
+  --model sha256-1194192cf2a187eb02722edcc3f77b11d21f537048ce04b67ccf8ba78863006a:latest \
   "$SQL"
