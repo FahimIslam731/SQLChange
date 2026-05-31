@@ -2,7 +2,7 @@
     Universal LLM call utility supporting Anthropic, OpenAI, and local (Ollama).
     
     Providers:
-      - "local" or "qwen" or "ollama": routes to Ollama at localhost:11434
+      - "local" or "qwen" or "ollama": routes to Ollama at localhost:11435
       - "anthropic": uses the Anthropic SDK
       - "openai": uses the OpenAI SDK]
 """
@@ -46,7 +46,7 @@ def llm_universal_call_utility(
 
         try:
             resp = requests.post(
-                "http://localhost:11434/api/generate",
+                "http://localhost:11435/api/generate",
                 json=payload,
                 timeout=120,
             )
@@ -54,7 +54,7 @@ def llm_universal_call_utility(
             response = resp.json()["response"]
         except requests.exceptions.ConnectionError:
             raise ConnectionError(
-                "Cannot connect to Ollama at localhost:11434. "
+                "Cannot connect to Ollama at localhost:11435. "
                 "Make sure Ollama is running: `ollama serve`"
             )
         except Exception as e:
