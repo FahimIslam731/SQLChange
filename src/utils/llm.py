@@ -38,7 +38,7 @@ def llm_universal_call_utility(
         payload = {
             "model": model or "qwen2.5-coder:7b",
             "messages": [
-                {"role": "user", "content": prompt},
+                {"role": "user", "content": prompt + " /no_think"},
             ],
             "stream": False,
         }
