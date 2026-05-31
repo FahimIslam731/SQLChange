@@ -35,13 +35,13 @@ def llm_universal_call_utility(
     if provider in _OLLAMA_PROVIDERS:
         import requests
 
-        # Build Ollama payload — forward num_predict and temperature if provided
         payload = {
             "model": model or "qwen2.5-coder:7b",
-            "prompt": prompt,
+            "messages": [
+                {"role": "user", "content": prompt},
+            ],
             "stream": False,
         }
-        # Ollama uses an "options" dict for generation parameters
         options = {}
         if "num_predict" in kwargs:
             options["num_predict"] = kwargs["num_predict"]
@@ -52,12 +52,12 @@ def llm_universal_call_utility(
 
         try:
             resp = requests.post(
-                "http://127.0.0.1:11435/api/generate",
+                "http://127.0.0.1:11435/api/chat",
                 json=payload,
                 timeout=300,
             )
             resp.raise_for_status()
-            response = resp.json()["response"]
+            response = resp.json()["message"]["content"]
         except requests.exceptions.ConnectionError:
             raise ConnectionError(
                 "Cannot connect to Ollama at 127.0.0.1:11435. "
