@@ -1,5 +1,5 @@
 import statistics
-from synthetic_db import build_sqlite_db, run_query
+from execution.synthetic_db import build_sqlite_db, run_query
 
 DEFAULT_SCALES = {"small": 50, "medium": 500, "large": 5000}
 

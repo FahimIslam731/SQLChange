@@ -1,4 +1,11 @@
-from synthetic_db import run_query_pair
+"""
+    Equivalence checker — runs original vs modified SQL and compares outputs.
+    
+    BUG FIX: Changed `from synthetic_db import ...` to relative import
+             `from .synthetic_db import ...` so it works when execution/
+             is imported as a package.
+"""
+from .synthetic_db import run_query_pair
 
 
 def check_equivalence(record, seed=0, rows_per_table=50):
@@ -9,4 +16,5 @@ def check_equivalence(record, seed=0, rows_per_table=50):
         "output_relation": relation,
         "row_count_original": result["comparison"]["row_count_original"],
         "row_count_modified": result["comparison"]["row_count_modified"],
+        "comparison": result["comparison"],
     }
