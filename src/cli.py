@@ -200,8 +200,6 @@ def display_results(result):
     _print_kv("Tables found", result.get("table_names", []))
     _print_kv("Join keys", len(result.get("join_keys", [])))
     _print_kv("WHERE deps", len(result.get("where_details", [])))
-    if result.get("sql_column_details"):
-        _print_json_block(result["sql_column_details"], "Schema")
 
     # ── ER Graph ──
     _print_header("STAGE 2: ER Graph", "bold green")
@@ -257,7 +255,8 @@ def display_results(result):
     _print_kv("Rationale", rec.get("rationale", ""))
     rec_sql = result.get("recommended_sql", "")
     if rec_sql and rec_sql != result.get("original_sql"):
-        _print_sql(rec_sql, "Recommended SQL")
+        preview = " ".join(rec_sql.split())[:120]
+        _print_kv("Recommended SQL", preview + ("..." if len(rec_sql) > 120 else ""))
     else:
         _print_status("No optimization — keeping original query", "yellow")
 
@@ -376,9 +375,6 @@ def main():
         output["elapsed_seconds"] = round(elapsed, 2)
         print(json.dumps(output, indent=2, default=str))
     else:
-        # Display step logs first for debugging
-        display_step_logs(result.get("step_logs", []))
-
         # Display formatted results
         display_results(result)
 
