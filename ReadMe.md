@@ -28,22 +28,22 @@ parse_sql() infer_context()
        │
        ▼
 ┌─────────────┐
-│ Execution   │  synthetic_db → in-memory SQLite
-│ Harness     │  Time comparison (small / large scales)
+│ Recommend   │  LLM generates optimized query
 └──────┬──────┘
        │
        ▼
 ┌─────────────┐
-│ Labeling    │  Deterministic rules first → LLM call 2 refine
+│ Execution   │  synthetic_db → in-memory SQLite
+│ Harness     │  Test recommended vs original (small / large scales)
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│ Labeling    │  Deterministic rules + LLM refine
 │ Pipeline    │  Performance · Risk · Semantic
 └──────┬──────┘
        │
-       ▼
-┌─────────────┐
-│ Recommend   │  LLM call 3 — suggest optimized query
-└──────┬──────┘
-       │
-  Iteration < N? ──yes──→ loop back to Execution Harness
+  Iteration < N? ──yes──→ loop back to Recommend (with label feedback)
        │
        no
        ▼
