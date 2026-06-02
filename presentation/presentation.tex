@@ -685,31 +685,33 @@
 % 9. EVALUATION
 % ==========================================================================
 
-% NOTE: Evaluation and Results slides are templates. Fill in after running the evaluation script.
-
 \begin{frame}{Evaluation}
   \begin{columns}[T]
 
     \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Evaluation Setup}\\[0.5em]
+      {\small\Raleway\bfseries\color{aggieblue} Evaluation Setup}\\[0.4em]
       \footnotesize
       \begin{itemize}
-        \setlength{\itemsep}{0.35em}
-        \item \textcolor{coolgray}{\textit{TODO: Describe the evaluation methodology}}
-        \item \textcolor{coolgray}{\textit{TODO: What does the evaluation script measure?}}
-        \item \textcolor{coolgray}{\textit{TODO: How are results aggregated?}}
-        \item \textcolor{coolgray}{\textit{TODO: Any baselines or comparisons?}}
+        \setlength{\itemsep}{0.3em}
+        \item \textbf{100 queries} built from gretelai/synthetic\_text\_to\_sql, excluding development set
+        \item Stratified: 34 simple, 37 moderate, 29 complex
+        \item \textbf{20 degraded queries} --- programmatically injected inefficiencies (unnecessary subqueries, redundant joins)
+        \item \textbf{20 no-DDL queries} --- schema must be inferred
+        \item Each query run through full pipeline with 5-minute timeout, up to 3 iterations
       \end{itemize}
     \end{column}
 
     \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Metrics}\\[0.5em]
+      {\small\Raleway\bfseries\color{aggieblue} Metrics}\\[0.4em]
       \footnotesize
       \begin{itemize}
-        \setlength{\itemsep}{0.35em}
-        \item \textcolor{coolgray}{\textit{TODO: What metrics are computed?}}
-        \item \textcolor{coolgray}{\textit{TODO: How is success defined?}}
-        \item \textcolor{coolgray}{\textit{TODO: What are the scoring criteria?}}
+        \setlength{\itemsep}{0.3em}
+        \item \textbf{Semantic equivalence} --- does the optimized query return the same results?
+        \item \textbf{Performance score} (1--10) --- speedup across 3 scales
+        \item \textbf{Risk score} (1--10) --- safety of the change
+        \item \textbf{Validity} --- does the recommendation parse and match the schema?
+        \item \textbf{Iteration depth} --- passes before convergence
+        \item \textbf{Wall-clock time} --- end-to-end latency
       \end{itemize}
     \end{column}
 
@@ -717,52 +719,52 @@
 \end{frame}
 
 % ==========================================================================
-% 9. RESULTS & ANALYSIS
+% 10. RESULTS & ANALYSIS
 % ==========================================================================
 
 \begin{frame}{Results \& Analysis}
+  \vspace{-0.3em}
   \centering
-
-  {\small\color{coolgray}\textit{Fill in table and analysis after running evaluation.}}
-
-  \vspace{0.8em}
 
   \resizebox{0.92\textwidth}{!}{%
     \begin{tabular}{lccccc}
       \toprule
-      \textbf{Query Type} & \textbf{Metric 1} & \textbf{Metric 2} & \textbf{Metric 3} & \textbf{Metric 4} & \textbf{Metric 5} \\
+      \textbf{Complexity Tier} & \textbf{Queries} & \textbf{Sem.\ Equiv.} & \textbf{Avg.\ Perf.} & \textbf{Avg.\ Risk} & \textbf{Avg.\ Iters} \\
       \midrule
-      \textit{Category 1}  & ---  & ---  & ---  & ---  & --- \\
-      \textit{Category 2}  & ---  & ---  & ---  & ---  & --- \\
-      \textit{Category 3}  & ---  & ---  & ---  & ---  & --- \\
-      \textit{Category 4}  & ---  & ---  & ---  & ---  & --- \\
-      \textit{Category 5}  & ---  & ---  & ---  & ---  & --- \\
+      Simple (basic SQL, single join)      & 34  & 79\%  & 6.6  & 3.6  & 1.2 \\
+      Moderate (aggregation, subqueries)   & 37  & 73\%  & 6.8  & 4.0  & 1.7 \\
+      Complex (multi-join, window, set)    & 29  & 52\%  & 7.2  & 3.8  & 1.8 \\
       \midrule
-      \textbf{Overall}     & ---  & ---  & ---  & ---  & --- \\
+      \textbf{Overall (100 queries)}       & 100 & 68\%  & 6.9  & 3.8  & 1.6 \\
       \bottomrule
     \end{tabular}
   }%
 
-  \vspace{0.8em}
+  \vspace{0.5em}
 
   \begin{columns}[T, onlytextwidth]
     \begin{column}{0.47\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Strengths}\\[0.4em]
+      {\small\Raleway\bfseries\color{aggieblue} Strengths}\\[0.3em]
       \footnotesize
       \begin{itemize}
-        \setlength{\itemsep}{0.3em}
-        \item \textcolor{coolgray}{\textit{TODO: where does the system perform well?}}
-        \item \textcolor{coolgray}{\textit{TODO: which query types benefit most?}}
+        \setlength{\itemsep}{0.25em}
+        \item 99\% pipeline success rate (1 error in 100)
+        \item 98\% valid recommendations (parseable SQL)
+        \item No-DDL inference works: 20/20 valid outputs
+        \item Simple queries: 79\% semantic equivalence
+        \item Converges fast: avg 1.6 iterations
       \end{itemize}
     \end{column}
     \hfill
     \begin{column}{0.47\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Limitations}\\[0.4em]
+      {\small\Raleway\bfseries\color{aggieblue} Limitations}\\[0.3em]
       \footnotesize
       \begin{itemize}
-        \setlength{\itemsep}{0.3em}
-        \item \textcolor{coolgray}{\textit{TODO: where does the system struggle?}}
-        \item \textcolor{coolgray}{\textit{TODO: common failure modes?}}
+        \setlength{\itemsep}{0.25em}
+        \item Complex queries: only 52\% equivalence --- multi-join and window function rewrites often alter result sets
+        \item Degraded queries: 60\% equivalence --- LLM sometimes over-optimizes
+        \item Avg 34.8s per query --- local 7B model is the bottleneck
+        \item Performance scores moderate (6.9 avg) --- SQLite micro-timings have high variance
       \end{itemize}
     \end{column}
   \end{columns}
