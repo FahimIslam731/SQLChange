@@ -647,33 +647,7 @@
 \begin{frame}{Evaluation}
   \begin{columns}[T]
 
-    \begin{column}{0.45\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Query Corpus --- 110 Queries}\\[0.5em]
-      \footnotesize
-      \begin{itemize}
-        \setlength{\itemsep}{0.3em}
-        \item \textbf{72 domains:} defense, healthcare, oceans, space, AI, blockchain, cosmetics, \ldots
-        \item Each query includes: natural-language prompt, DDL context, ground-truth SQL, explanation
-      \end{itemize}
-
-      \vspace{0.2em}
-      {\small\Raleway\bfseries\color{aggieblue} Complexity Distribution}\\[0.2em]
-      \scriptsize
-      \begin{tabular}{lr}
-        \toprule
-        \textbf{Type} & \textbf{Count} \\
-        \midrule
-        Aggregation & 32 \\
-        Basic SQL & 29 \\
-        Window functions & 19 \\
-        Single join & 11 \\
-        Multiple joins / Subqueries & 16 \\
-        Set operations & 3 \\
-        \bottomrule
-      \end{tabular}
-    \end{column}
-
-    \begin{column}{0.52\textwidth}
+    \begin{column}{0.48\textwidth}
       {\small\Raleway\bfseries\color{aggieblue} Evaluation Setup}\\[0.5em]
       \footnotesize
       \begin{itemize}
@@ -682,6 +656,17 @@
         \item \textcolor{coolgray}{\textit{TODO: What does the evaluation script measure?}}
         \item \textcolor{coolgray}{\textit{TODO: How are results aggregated?}}
         \item \textcolor{coolgray}{\textit{TODO: Any baselines or comparisons?}}
+      \end{itemize}
+    \end{column}
+
+    \begin{column}{0.48\textwidth}
+      {\small\Raleway\bfseries\color{aggieblue} Metrics}\\[0.5em]
+      \footnotesize
+      \begin{itemize}
+        \setlength{\itemsep}{0.35em}
+        \item \textcolor{coolgray}{\textit{TODO: What metrics are computed?}}
+        \item \textcolor{coolgray}{\textit{TODO: How is success defined?}}
+        \item \textcolor{coolgray}{\textit{TODO: What are the scoring criteria?}}
       \end{itemize}
     \end{column}
 
@@ -748,24 +733,38 @@
   \begin{columns}[T]
 
     \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} What Worked}\\[0.6em]
+      {\small\Raleway\bfseries\color{aggieblue} What We Built}\\[0.4em]
+      \footnotesize
       \begin{itemize}
-        \setlength{\itemsep}{0.6em}
-        \item End-to-end pipeline from raw SQL to verified optimization
-        \item Execution-based verification catches silent result-set changes
-        \item Hybrid deterministic + LLM reasoning is cost-efficient and auditable
-        \item Iterative feedback loop improves quality across passes
+        \setlength{\itemsep}{0.35em}
+        \item End-to-end agentic pipeline that \textit{generates} optimized SQL --- the proposal planned comparison only; we went further
+        \item Execution-verified: synthetic DB testing catches silent result-set changes that LLM-only approaches miss
+        \item Iterative feedback loop (not in original proposal) --- labels feed back to the LLM for progressive improvement
+        \item Schema inference from queries alone --- works without DDL, which the proposal assumed would always be available
+        \item Runs fully local on Qwen 2.5 7B via Ollama --- no data leaves the machine
       \end{itemize}
     \end{column}
 
     \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Limitations \& Future Work}\\[0.6em]
+      {\small\Raleway\bfseries\color{aggieblue} Limitations}\\[0.4em]
+      \footnotesize
       \begin{itemize}
-        \setlength{\itemsep}{0.6em}
-        \item Constrained to SQLite dialect --- future: PostgreSQL, MySQL
-        \item Local 7B model (Qwen 2.5) --- larger models or fine-tuning may improve recommendation quality
-        \item Synthetic data only --- real database connections for production use
-        \item Expand beyond SQL: schema migration, stored procedures, query plan analysis
+        \setlength{\itemsep}{0.35em}
+        \item SQLite only --- proposal planned PostgreSQL/MySQL support
+        \item 110 queries vs.\ the proposed 250--300 pairs; no Spider/BIRD or real GitHub commit pairs
+        \item No baseline comparison (zero-shot LLM vs.\ structured prompt) as proposed
+        \item Scales limited to 5k rows --- proposal targeted 10k--1M
+      \end{itemize}
+
+      \vspace{0.3em}
+      {\small\Raleway\bfseries\color{aggieblue} Future Work}\\[0.4em]
+      \footnotesize
+      \begin{itemize}
+        \setlength{\itemsep}{0.35em}
+        \item Multi-dialect support (PostgreSQL, MySQL)
+        \item Real database connections for production testing
+        \item Larger or fine-tuned models for better output
+        \item RAG for query-plan-aware optimization
       \end{itemize}
     \end{column}
 
