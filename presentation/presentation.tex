@@ -413,26 +413,63 @@
 \begin{frame}{Recommendation Engine}
   \begin{columns}[T]
 
-    \begin{column}{0.52\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} LLM-Powered Optimization}\\[0.5em]
-      \small
-      \begin{itemize}
-        \setlength{\itemsep}{0.5em}
-        \item LLM receives \textbf{full upstream context}: parsed schema, ER graph, prior execution evidence, and iteration labels
-        \item Generates optimized SQL with action type (\texttt{optimize}, \texttt{rewrite}, \texttt{keep\_original}, \texttt{flag\_for\_review})
-        \item Outputs confidence score (1--10) and natural-language rationale
-        \item On subsequent iterations: receives prior labels and adjusts conservatively if risk $\geq 7$
-      \end{itemize}
+    \begin{column}{0.42\textwidth}
+      \centering
+      \resizebox{!}{0.78\textheight}{%
+      \begin{tikzpicture}[
+        node distance=0.35cm,
+        box/.style={rectangle, rounded corners=3pt, minimum height=0.6cm, minimum width=2.6cm,
+          font=\scriptsize\bfseries, align=center, inner sep=3pt, draw=none},
+        inbox/.style={box, fill=aggieblue!15, text=aggieblue},
+        procbox/.style={box, fill=aggieblue, text=white},
+        llmbox/.style={box, fill=aggiegoldDark, text=white},
+        valbox/.style={box, fill=aggiegold!20, text=aggieblueDark},
+        outbox/.style={box, fill=aggieblueDark, text=white},
+        arr/.style={-{Stealth[length=2pt, width=1.5pt]}, semithick, color=coolgray},
+      ]
+        \node[inbox] (ctx) {Build context\\[-0.5ex]{\tiny schema + ER graph + execution + labels}};
+        \node[procbox, below=0.3cm of ctx] (prompt) {Construct prompt\\[-0.5ex]{\tiny combine all 4 summaries + original SQL}};
+        \node[llmbox, below=0.3cm of prompt] (llm) {LLM call\\[-0.5ex]{\tiny Qwen 2.5 --- 512 tokens}};
+        \node[procbox, below=0.3cm of llm] (parse) {Parse response\\[-0.5ex]{\tiny extract SQL, action, score, rationale}};
+        \node[valbox, below=0.3cm of parse] (v1) {Syntax check\\[-0.5ex]{\tiny sqlglot parse}};
+        \node[valbox, below=0.3cm of v1] (v2) {SQLite compat\\[-0.5ex]{\tiny flag unsupported patterns}};
+        \node[valbox, below=0.3cm of v2] (v3) {Schema reference\\[-0.5ex]{\tiny verify tables \& columns exist}};
+        \node[outbox, below=0.3cm of v3] (out) {Output\\[-0.5ex]{\tiny SQL + action + score + confidence}};
+
+        \draw[arr] (ctx) -- (prompt);
+        \draw[arr] (prompt) -- (llm);
+        \draw[arr] (llm) -- (parse);
+        \draw[arr] (parse) -- (v1);
+        \draw[arr] (v1) -- (v2);
+        \draw[arr] (v2) -- (v3);
+        \draw[arr] (v3) -- (out);
+
+        \begin{scope}[on background layer]
+          \node[fit=(v1)(v2)(v3), fill=aggiegold!8, rounded corners=4pt, inner sep=5pt] (valframe) {};
+        \end{scope}
+        \node[font=\tiny\bfseries, text=aggiegoldDark, anchor=south east] at (valframe.north east) {3-layer validation};
+      \end{tikzpicture}%
+      }% end resizebox
     \end{column}
 
-    \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Three-Layer Validation}\\[0.5em]
-      \small
+    \begin{column}{0.55\textwidth}
+      {\small\Raleway\bfseries\color{aggieblue} LLM-Powered Optimization}\\[0.4em]
+      \footnotesize
       \begin{itemize}
-        \setlength{\itemsep}{0.5em}
-        \item \textbf{Syntax check} --- sqlglot must parse the output as valid SQL (SELECT, UNION, etc.)
-        \item \textbf{SQLite compatibility} --- flags unsupported patterns (DATE\_SUB, INTERVAL, IF(), ILIKE, RIGHT JOIN) and suggests equivalents
-        \item \textbf{Schema reference} --- every table and column in the recommended SQL must exist in the parsed schema (allows aliases and CTEs)
+        \setlength{\itemsep}{0.35em}
+        \item LLM receives \textbf{full upstream context}: schema summary, ER graph hierarchy, execution evidence, and prior iteration labels
+        \item Outputs: optimized SQL, action type (\texttt{optimize} / \texttt{rewrite} / \texttt{keep\_original}), confidence (1--10), rationale
+        \item On later iterations: sees why the last attempt scored poorly and adjusts (conservative if risk $\geq 7$)
+      \end{itemize}
+
+      \vspace{0.3em}
+      {\small\Raleway\bfseries\color{aggieblue} Three-Layer Validation}\\[0.4em]
+      \footnotesize
+      \begin{itemize}
+        \setlength{\itemsep}{0.35em}
+        \item \textbf{Syntax} --- sqlglot must parse output as valid SQL
+        \item \textbf{SQLite compat} --- flags DATE\_SUB, INTERVAL, IF(), ILIKE, RIGHT JOIN; suggests equivalents
+        \item \textbf{Schema ref} --- every table/column must exist in schema; validation fails $\to$ confidence downgraded
       \end{itemize}
     \end{column}
 
@@ -446,28 +483,60 @@
 \begin{frame}{Execution Harness \& Labeling}
   \begin{columns}[T]
 
-    \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Synthetic Database Testing}\\[0.5em]
-      \small
-      \begin{itemize}
-        \setlength{\itemsep}{0.4em}
-        \item Deterministic in-memory SQLite databases seeded by hash
-        \item \textbf{Three scales:} 50 / 500 / 5{,}000 rows per table
-        \item Realistic join conditions ($\sim$75\% match rate)
-        \item Runs original vs.\ optimized on identical data
-        \item \textbf{Equivalence:} identical / narrower / broader / different / error
-        \item \textbf{Performance:} median of 5 runs per scale, speedup ratio
-      \end{itemize}
+    \begin{column}{0.42\textwidth}
+      \centering
+      \resizebox{!}{0.78\textheight}{%
+      \begin{tikzpicture}[
+        node distance=0.35cm,
+        box/.style={rectangle, rounded corners=3pt, minimum height=0.6cm, minimum width=2.6cm,
+          font=\scriptsize\bfseries, align=center, inner sep=3pt, draw=none},
+        buildbox/.style={box, fill=aggieblue, text=white},
+        execbox/.style={box, fill=aggieblue!15, text=aggieblue},
+        cmpbox/.style={box, fill=aggiegoldDark, text=white},
+        scalebox/.style={box, fill=aggiegold!20, text=aggieblueDark},
+        outbox/.style={box, fill=aggieblueDark, text=white},
+        arr/.style={-{Stealth[length=2pt, width=1.5pt]}, semithick, color=coolgray},
+      ]
+        \node[buildbox] (build) {Build synthetic DB\\[-0.5ex]{\tiny seeded in-memory SQLite}};
+        \node[scalebox, below=0.3cm of build] (scales) {3 scales\\[-0.5ex]{\tiny 50 / 500 / 5{,}000 rows per table}};
+        \node[execbox, below=0.3cm of scales] (orig) {Run original SQL\\[-0.5ex]{\tiny median of 5 runs per scale}};
+        \node[execbox, below=0.3cm of orig] (mod) {Run optimized SQL\\[-0.5ex]{\tiny same DB, same scales}};
+        \node[cmpbox, below=0.3cm of mod] (cmp) {Compare outputs\\[-0.5ex]{\tiny row sets $\to$ identical / narrower /}\\[-0.5ex]{\tiny broader / different / error}};
+        \node[cmpbox, below=0.3cm of cmp] (perf) {Compare timing\\[-0.5ex]{\tiny speedup = original\_ms / modified\_ms}};
+        \node[outbox, below=0.3cm of perf] (out) {Execution evidence\\[-0.5ex]{\tiny equivalence + timing per scale}};
+
+        \draw[arr] (build) -- (scales);
+        \draw[arr] (scales) -- (orig);
+        \draw[arr] (orig) -- (mod);
+        \draw[arr] (mod) -- (cmp);
+        \draw[arr] (cmp) -- (perf);
+        \draw[arr] (perf) -- (out);
+
+        \begin{scope}[on background layer]
+          \node[fit=(orig)(mod)(cmp)(perf), fill=aggieblue!6, rounded corners=4pt, inner sep=5pt] {};
+        \end{scope}
+      \end{tikzpicture}%
+      }% end resizebox
     \end{column}
 
-    \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Reasoning Labels}\\[0.5em]
-      \small
+    \begin{column}{0.55\textwidth}
+      {\small\Raleway\bfseries\color{aggieblue} Synthetic Database}\\[0.4em]
+      \footnotesize
       \begin{itemize}
-        \setlength{\itemsep}{0.4em}
-        \item \textbf{Semantic} (equivalence) --- deterministic rules classify from execution output; LLM refines only when confidence is low
-        \item \textbf{Performance} (1--10) --- multi-scale timing analysis; 8--10 = significant improvement, 1--2 = severe degradation
-        \item \textbf{Risk} (1--10) --- table importance, join depth, cross-table WHERE conditions, row-count mismatches
+        \setlength{\itemsep}{0.3em}
+        \item Deterministic: seeded by query hash, reproducible across runs
+        \item 75\% join match rate with realistic boundary values for WHERE clauses
+        \item SQL normalized for SQLite (DATE\_SUB $\to$ strftime, true $\to$ 1)
+      \end{itemize}
+
+      \vspace{0.3em}
+      {\small\Raleway\bfseries\color{aggieblue} Reasoning Labels}\\[0.4em]
+      \footnotesize
+      \begin{itemize}
+        \setlength{\itemsep}{0.3em}
+        \item \textbf{Semantic} --- deterministic classification from execution output (identical / narrower / broader / different); LLM refines only when confidence is low
+        \item \textbf{Performance} (1--10) --- multi-scale timing; 8--10 = major speedup, 1--2 = degradation
+        \item \textbf{Risk} (1--10) --- table importance hierarchy, join depth, cross-table WHERE, row-count mismatches
       \end{itemize}
     \end{column}
 
