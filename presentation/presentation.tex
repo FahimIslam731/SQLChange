@@ -642,39 +642,28 @@
 % 8. INTERPRETABILITY
 % ==========================================================================
 
+% NOTE: Interpretability slide is a template. Fill in with examples and material.
+
 \begin{frame}{Interpretability}
   \begin{columns}[T]
 
     \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Every Decision is Explainable}\\[0.4em]
       \footnotesize
       \begin{itemize}
         \setlength{\itemsep}{0.35em}
-        \item Each label (semantic, performance, risk) includes a \textbf{natural-language rationale} explaining why the score was assigned
-        \item Confidence level (high / medium / low) tells the user how much to trust the assessment
-        \item Deterministic labels cite concrete evidence: row counts, timing ratios, table hierarchy --- not LLM opinion
-        \item LLM rationales are capped at 100 words to stay focused
+        \item \textcolor{coolgray}{\textit{TODO: How does the system explain its decisions?}}
+        \item \textcolor{coolgray}{\textit{TODO: Example output showing rationale and confidence}}
+        \item \textcolor{coolgray}{\textit{TODO: What makes the reasoning traceable?}}
       \end{itemize}
     \end{column}
 
     \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Per-Iteration History}\\[0.4em]
       \footnotesize
       \begin{itemize}
         \setlength{\itemsep}{0.35em}
-        \item Full iteration history is preserved --- every pass records its scores, labels, and the SQL that was tried
-        \item Users can trace \textit{why} the pipeline converged: which iteration improved performance, which reduced risk
-        \item The recommendation includes the list of optimizations applied and a rationale for each change
-      \end{itemize}
-
-      \vspace{0.3em}
-      {\small\Raleway\bfseries\color{aggieblue} Output Structure}\\[0.4em]
-      \footnotesize
-      \begin{itemize}
-        \setlength{\itemsep}{0.35em}
-        \item Action type: \texttt{optimize}, \texttt{rewrite}, \texttt{keep\_original}, or \texttt{flag\_for\_review}
-        \item Validation results: syntax errors, SQLite warnings, unknown schema references
-        \item All accessible via CLI, REST API, or Python API
+        \item \textcolor{coolgray}{\textit{TODO: Per-iteration history and what it shows}}
+        \item \textcolor{coolgray}{\textit{TODO: Output structure and action types}}
+        \item \textcolor{coolgray}{\textit{TODO: How users access results (CLI, API)}}
       \end{itemize}
     \end{column}
 
