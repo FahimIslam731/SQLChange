@@ -479,38 +479,91 @@
 % ==========================================================================
 
 \begin{frame}{Iterative Refinement}
+  % --- Diagram: bottom row of architecture ---
+  \centering
+  \vspace{-0.3em}
+  \resizebox{0.92\textwidth}{!}{%
+  \begin{tikzpicture}[
+    node distance=0.5cm and 0.6cm,
+    stage/.style={rectangle, rounded corners=4pt, minimum height=1.0cm, minimum width=2.0cm,
+      font=\footnotesize\bfseries, align=center, inner sep=4pt, draw=none},
+    determ/.style={stage, fill=aggieblue, text=white},
+    llmnode/.style={stage, fill=aggiegoldDark, text=white},
+    iobox/.style={stage, fill=aggieblueDark, text=white, rounded corners=7pt},
+    decision/.style={diamond, aspect=2.2, minimum height=0.9cm, minimum width=1.1cm,
+      font=\footnotesize\bfseries, fill=aggiegold!25, draw=aggiegoldDark, line width=0.6pt,
+      text=aggieblueDark, inner sep=3pt, align=center},
+    sublabel/.style={rectangle, rounded corners=3pt, minimum height=0.7cm, minimum width=1.6cm,
+      font=\footnotesize\bfseries, inner sep=3pt, align=center, draw=none},
+    flow/.style={-{Stealth[length=3pt, width=2.5pt]}, semithick, color=coolgray},
+    loopback/.style={-{Stealth[length=3.5pt, width=3pt]}, semithick, color=aggiegoldDark},
+    notelbl/.style={font=\tiny\bfseries, text=aggieblue},
+  ]
+    \node[determ] (exec) {Execution\\Harness};
+
+    \node[sublabel, fill=aggiegoldDark, text=white,
+          left=0.8cm of exec, yshift=0.8cm]    (lsem)  {Semantic};
+    \node[sublabel, fill=aggiegoldDark, text=white,
+          left=0.8cm of exec]                   (lrisk) {Risk};
+    \node[sublabel, fill=aggiegoldDark, text=white,
+          left=0.8cm of exec, yshift=-0.8cm]   (lperf) {Performance};
+
+    \node[llmnode, left=0.8cm of lrisk, xshift=-0.3cm] (rec) {LLM\\Recommend};
+    \node[decision, left=of rec] (iter) {Iterate?};
+    \node[iobox, left=0.6cm of iter] (out) {Final\\Output};
+
+    \coordinate (fanpt) at ($(exec.west)+(-0.3,0)$);
+    \draw[flow] (exec.west) -- (fanpt) |- (lsem.east);
+    \draw[flow] (fanpt) -- (lrisk.east);
+    \draw[flow] (fanpt) |- (lperf.east);
+
+    \coordinate (convpt) at ($(rec.east)+(0.3,0)$);
+    \draw[flow] (lsem.west) -| (convpt) -- (rec.east);
+    \draw[flow] (lrisk.west) -- (convpt);
+    \draw[flow] (lperf.west) -| (convpt);
+
+    \draw[flow] (rec) -- (iter);
+    \draw[flow] (iter.west) -- (out);
+
+    \draw[loopback] (iter.south) -- ++(0,-0.9) -| (exec.south);
+    \node[below=1.0cm of iter, inner sep=0pt, minimum size=0pt] {};
+
+    % --- Annotations ---
+    \node[notelbl, above=0.15cm of exec] {run both queries};
+    \node[notelbl, above=0.15cm of rec] {use scores as context};
+  \end{tikzpicture}%
+  }% end resizebox
+
+  \vspace{0.4em}
+  \rule{0.9\textwidth}{0.3pt}
+  \vspace{0.2em}
+
+  % --- Two columns: loop mechanics + stop conditions ---
   \begin{columns}[T]
 
-    \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} How the Loop Works}\\[0.4em]
+    \begin{column}{0.50\textwidth}
+      {\small\Raleway\bfseries\color{aggieblue} How It Works}\\[0.2em]
+      \footnotesize
       \begin{itemize}
-        \setlength{\itemsep}{0.35em}
-        \item The execution harness runs both queries on synthetic data and produces equivalence + timing results
-        \item Three labelers score the result: \textbf{semantic} (did the output change?), \textbf{performance} (is it faster?), \textbf{risk} (is it safe?)
-        \item Deterministic rules assign labels first; the LLM only refines when confidence is low
-        \item All scores feed back to the LLM, which generates an improved query with that context
-        \item Loops until thresholds met (max 3 passes)
+        \setlength{\itemsep}{0.25em}
+        \item Harness executes original + optimized SQL on synthetic data at 3 scales
+        \item Labelers score: deterministic rules first, LLM only if confidence is low
+        \item Scores feed back to LLM --- it sees \textit{why} the last attempt failed
+        \item High risk $\to$ conservative mode; wrong results $\to$ prioritize correctness
       \end{itemize}
     \end{column}
 
-    \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Stop Conditions}\\[0.5em]
+    \begin{column}{0.46\textwidth}
+      {\small\Raleway\bfseries\color{aggieblue} Stop Conditions}\\[0.2em]
+      \footnotesize
       \begin{itemize}
-        \setlength{\itemsep}{0.4em}
-        \item Performance $\geq 8$ \textbf{and} risk $\leq 3$
+        \setlength{\itemsep}{0.25em}
+        \item Perf $\geq 8$ \textbf{and} risk $\leq 3$
         \item LLM recommends \texttt{keep\_original}
-        \item Generated SQL fails validation
+        \item SQL fails validation
         \item Max iterations reached (default: 3)
       \end{itemize}
 
-      \vspace{0.6em}
-      {\small\Raleway\bfseries\color{aggieblue} Per-Iteration Context}\\[0.5em]
-      \begin{itemize}
-        \setlength{\itemsep}{0.4em}
-        \item Each iteration passes the prior iteration's scores, labels, and rationale to the LLM
-        \item If risk $\geq 7$, the LLM switches to a conservative optimization strategy
-        \item If semantic label is ``narrower'' or ``different'', the LLM prioritizes preserving the original result set
-      \end{itemize}
     \end{column}
 
   \end{columns}
