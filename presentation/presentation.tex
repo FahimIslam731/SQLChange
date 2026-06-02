@@ -637,37 +637,7 @@
 \end{frame}
 
 % ==========================================================================
-% 8. INTERPRETABILITY
-% ==========================================================================
-
-% NOTE: Interpretability slide is a template. Fill in with examples and material.
-
-\begin{frame}{Interpretability}
-  \begin{columns}[T]
-
-    \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Context Attention Heatmaps}\\[0.4em]
-      \footnotesize
-      \begin{itemize}
-        \setlength{\itemsep}{0.35em}
-        \item \textcolor{coolgray}{\textit{TODO: description and example}}
-      \end{itemize}
-    \end{column}
-
-    \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Per-Layer Attention Maximums}\\[0.4em]
-      \footnotesize
-      \begin{itemize}
-        \setlength{\itemsep}{0.35em}
-        \item \textcolor{coolgray}{\textit{TODO: description and example}}
-      \end{itemize}
-    \end{column}
-
-  \end{columns}
-\end{frame}
-
-% ==========================================================================
-% 9. EVALUATION
+% 8. EVALUATION
 % ==========================================================================
 
 \begin{frame}{Evaluation}
@@ -704,7 +674,7 @@
 \end{frame}
 
 % ==========================================================================
-% 10. RESULTS & ANALYSIS
+% 9. RESULTS & ANALYSIS
 % ==========================================================================
 
 \begin{frame}{Results \& Analysis}
@@ -755,6 +725,7 @@
 
 % ==========================================================================
 % 10. CONCLUSIONS & FUTURE WORK
+
 % ==========================================================================
 
 \begin{frame}{Conclusions \& Future Work}
@@ -769,7 +740,7 @@
         \item Execution-verified: synthetic DB testing catches silent result-set changes that LLM-only approaches miss
         \item Iterative feedback loop --- labels feed back to the LLM for progressive improvement
         \item Schema inference from queries alone --- works without DDL, which the proposal assumed would always be available
-        \item Runs fully local via Ollama --- no data leaves the machine. Evaluation on Qwen2.5:7b; interpretability demo on Qwen3-coder:30b-a3b
+        \item Runs fully local via Ollama --- no data leaves the machine. Evaluation on Qwen2.5:7b
       \end{itemize}
     \end{column}
 
