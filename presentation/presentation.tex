@@ -321,6 +321,15 @@
   }% end resizebox
   \vspace{0.3em}
   \footnotesize\textbf{DDL} = Data Definition Language (\texttt{CREATE TABLE}, schema definitions)
+  \hfill
+  \begin{tikzpicture}[baseline=-0.5ex]
+    \node[rectangle, rounded corners=3pt, fill=aggieblueDark, text=white,
+          font=\footnotesize\bfseries, inner sep=3pt, minimum height=0.5cm] (l1) {Input / Output};
+    \node[rectangle, rounded corners=3pt, fill=aggieblue, text=white,
+          font=\footnotesize\bfseries, inner sep=3pt, minimum height=0.5cm, right=0.3cm of l1] (l2) {Deterministic};
+    \node[rectangle, rounded corners=3pt, fill=aggiegoldDark, text=white,
+          font=\footnotesize\bfseries, inner sep=3pt, minimum height=0.5cm, right=0.3cm of l2] (l3) {AI / LLM};
+  \end{tikzpicture}
   \vfill
 \end{frame}
 
@@ -340,7 +349,7 @@
         box/.style={rectangle, rounded corners=3pt, minimum height=0.7cm, minimum width=2.8cm,
           font=\scriptsize\bfseries, align=center, inner sep=3pt, draw=none},
         parsebox/.style={box, fill=aggieblue, text=white},
-        ddlbox/.style={box, fill=aggieblue!15, text=aggieblue},
+        ddlbox/.style={box, fill=aggieblue!30, text=aggieblue},
         llmbox/.style={box, fill=aggiegoldDark, text=white},
         erbox/.style={box, fill=aggieblue!80, text=white},
         dec/.style={diamond, aspect=2, minimum height=0.5cm, font=\scriptsize\bfseries,
@@ -420,10 +429,10 @@
         node distance=0.35cm,
         box/.style={rectangle, rounded corners=3pt, minimum height=0.6cm, minimum width=2.6cm,
           font=\scriptsize\bfseries, align=center, inner sep=3pt, draw=none},
-        inbox/.style={box, fill=aggieblue!15, text=aggieblue},
+        inbox/.style={box, fill=aggieblue!30, text=aggieblue},
         procbox/.style={box, fill=aggieblue, text=white},
         llmbox/.style={box, fill=aggiegoldDark, text=white},
-        valbox/.style={box, fill=aggiegold!20, text=aggieblueDark},
+        valbox/.style={box, fill=aggieblue!30, text=aggieblue},
         outbox/.style={box, fill=aggieblueDark, text=white},
         arr/.style={-{Stealth[length=2pt, width=1.5pt]}, semithick, color=coolgray},
       ]
@@ -445,9 +454,9 @@
         \draw[arr] (v3) -- (out);
 
         \begin{scope}[on background layer]
-          \node[fit=(v1)(v2)(v3), fill=aggiegold!8, rounded corners=4pt, inner sep=5pt] (valframe) {};
+          \node[fit=(v1)(v2)(v3), fill=aggieblue!8, rounded corners=4pt, inner sep=5pt] (valframe) {};
         \end{scope}
-        \node[font=\tiny\bfseries, text=aggiegoldDark, anchor=south east] at (valframe.north east) {3-layer validation};
+        \node[font=\tiny\bfseries, text=aggieblue, anchor=south east] at (valframe.north east) {3-layer validation};
       \end{tikzpicture}%
       }% end resizebox
     \end{column}
@@ -491,9 +500,9 @@
         box/.style={rectangle, rounded corners=3pt, minimum height=0.6cm, minimum width=2.6cm,
           font=\scriptsize\bfseries, align=center, inner sep=3pt, draw=none},
         buildbox/.style={box, fill=aggieblue, text=white},
-        execbox/.style={box, fill=aggieblue!15, text=aggieblue},
-        cmpbox/.style={box, fill=aggiegoldDark, text=white},
-        scalebox/.style={box, fill=aggiegold!20, text=aggieblueDark},
+        execbox/.style={box, fill=aggieblue!30, text=aggieblue},
+        cmpbox/.style={box, fill=aggieblue, text=white},
+        scalebox/.style={box, fill=aggieblue!30, text=aggieblue},
         outbox/.style={box, fill=aggieblueDark, text=white},
         arr/.style={-{Stealth[length=2pt, width=1.5pt]}, semithick, color=coolgray},
       ]
@@ -513,7 +522,7 @@
         \draw[arr] (perf) -- (out);
 
         \begin{scope}[on background layer]
-          \node[fit=(orig)(mod)(cmp)(perf), fill=aggieblue!6, rounded corners=4pt, inner sep=5pt] {};
+          \node[fit=(orig)(mod)(cmp)(perf), fill=aggieblue!8, rounded corners=4pt, inner sep=5pt] {};
         \end{scope}
       \end{tikzpicture}%
       }% end resizebox
@@ -637,7 +646,96 @@
 \end{frame}
 
 % ==========================================================================
-% 8. EVALUATION
+% 8. INTERPRETABILITY
+% ==========================================================================
+
+\begin{frame}{Interpretability}
+  \vspace{-0.5em}
+  \begin{columns}[T]
+
+    \begin{column}{0.44\textwidth}
+      {\small\Raleway\bfseries\color{aggieblue} Attention Heatmap}\\[0.2em]
+      \centering
+      \includegraphics[width=\textwidth,height=0.68\textheight,keepaspectratio]{../pics/attn-heatmap.png}\\[0.2em]
+      \scriptsize Token-level attention overlay on the prompt context during SQL optimization.
+    \end{column}
+
+    \begin{column}{0.52\textwidth}
+      \centering
+      \resizebox{0.95\textwidth}{!}{%
+      \begin{tikzpicture}[
+        node distance=0.5cm and 0.7cm,
+        comp/.style={rectangle, rounded corners=5pt, minimum height=1.1cm, minimum width=3.0cm,
+          font=\footnotesize\bfseries, align=center, inner sep=5pt, draw=none},
+        agent/.style={comp, fill=aggieblue, text=white},
+        model/.style={comp, fill=aggiegoldDark, text=white},
+        internal/.style={rectangle, rounded corners=3pt, minimum height=0.8cm,
+          font=\scriptsize\bfseries, align=center, inner sep=4pt, draw=none,
+          fill=aggiegoldDark, text=white},
+        gl/.style={comp, fill=aggieblueDark, text=white},
+        arr/.style={-{Stealth[length=3pt, width=2.5pt]}, semithick},
+        lbl/.style={font=\scriptsize\bfseries, fill=white, inner sep=2pt, rounded corners=1pt},
+      ]
+        % SQLChange agent top-left
+        \node[agent] (agent) {SQLChange\\Pipeline};
+
+        % llama.cpp top-right — extra gap so label fits
+        \node[model, right=1.6cm of agent] (llm) {llama.cpp\\[-0.3ex]{\scriptsize flash\_attn = disabled}};
+
+        % Agent <-> Model
+        \draw[arr, color=aggieblue] ([yshift=4pt]agent.east) -- ([yshift=4pt]llm.west)
+          node[lbl, midway, above, text=aggieblue] {SQL prompt};
+        \draw[arr, color=aggiegoldDark] ([yshift=-4pt]llm.west) -- ([yshift=-4pt]agent.east)
+          node[lbl, midway, below, text=aggiegoldDark] {tokens};
+
+        % llama_decode box
+        \node[internal, below=0.5cm of llm, minimum width=3.0cm] (decode)
+          {\texttt{llama\_decode()}\\[-0.3ex]{\tiny transformer forward pass}};
+        \draw[arr, color=aggiegoldDark!70] (llm) -- (decode);
+
+        % eval_callback
+        \node[internal, below=0.5cm of decode, minimum width=3.0cm]
+          (cb) {\texttt{eval\_callback}\\[-0.3ex]{\tiny called per tensor, per layer}};
+        \draw[arr, color=aggiegoldDark!70] (decode) -- (cb)
+          node[lbl, midway, right, text=aggiegoldDark, xshift=2pt] {each layer};
+
+        % Two tensor extractions
+        \node[internal, below left=0.5cm and 0.0cm of cb, minimum width=2.0cm] (kq)
+          {\texttt{kq\_soft\_max}\\[-0.3ex]{\tiny head-avg attention}};
+        \node[internal, below right=0.5cm and 0.0cm of cb, minimum width=2.0cm] (lout)
+          {\texttt{l\_out}\\[-0.3ex]{\tiny activation L2 norm}};
+        \draw[arr, color=aggiegoldDark!50] (cb) -| (kq);
+        \draw[arr, color=aggiegoldDark!50] (cb) -| (lout);
+
+        % Aggregate
+        \node[gl, below=0.6cm of $(kq)!0.5!(lout)$, minimum width=3.4cm] (agg)
+          {Aggregate + colormap\\[-0.3ex]{\scriptsize EMA / Max / Recent / Final}};
+        \draw[arr, color=aggieblueDark] (kq) |- (agg);
+        \draw[arr, color=aggieblueDark] (lout) |- (agg);
+
+        % glTexImage2D
+        \node[gl, below=0.5cm of agg, fill=aggieblueDark!80, minimum width=3.4cm] (tex)
+          {\texttt{glTexImage2D}\\[-0.3ex]{\scriptsize RGBA pixels $\to$ GL texture}};
+        \draw[arr, color=aggieblueDark] (agg) -- (tex);
+
+        % Arrow pointing left to the heatmap image
+        \draw[arr, color=aggieblueDark, thick] (tex.west) -- ++(-4.5,0)
+          node[lbl, midway, above, text=aggieblueDark] {token heatmap overlay};
+
+        % Background for model internals
+        \begin{scope}[on background layer]
+          \node[fit=(decode)(cb)(kq)(lout), fill=aggieblue!8, rounded corners=5pt, inner sep=7pt] {};
+        \end{scope}
+
+      \end{tikzpicture}%
+      }% end resizebox
+    \end{column}
+
+  \end{columns}
+\end{frame}
+
+% ==========================================================================
+% 9. EVALUATION
 % ==========================================================================
 
 \begin{frame}{Evaluation}
@@ -674,7 +772,7 @@
 \end{frame}
 
 % ==========================================================================
-% 9. RESULTS & ANALYSIS
+% 10. RESULTS & ANALYSIS
 % ==========================================================================
 
 \begin{frame}{Results \& Analysis}
@@ -724,7 +822,7 @@
 \end{frame}
 
 % ==========================================================================
-% 10. CONCLUSIONS & FUTURE WORK
+% 11. CONCLUSIONS & FUTURE WORK
 
 % ==========================================================================
 
