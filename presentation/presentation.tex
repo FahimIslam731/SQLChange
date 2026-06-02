@@ -114,7 +114,7 @@
 \title{SQLChange: An Agentic Reasoning Pipeline for SQL Query Optimization}
 \subtitle{}
 \author{Ahmed Khan \and Fahim Islam \and Dev Rathod \and Arnav Akula \and Devarchith Parashara Batchu}
-\institute{ECS 189G --- Machine Learning \\ University of California, Davis}
+\institute{ECS 189G --- Large Foundation Models \\ University of California, Davis}
 \date{June 2026}
 
 \titlegraphic{}
@@ -648,22 +648,20 @@
   \begin{columns}[T]
 
     \begin{column}{0.48\textwidth}
+      {\small\Raleway\bfseries\color{aggieblue} Context Attention Heatmaps}\\[0.4em]
       \footnotesize
       \begin{itemize}
         \setlength{\itemsep}{0.35em}
-        \item \textcolor{coolgray}{\textit{TODO: How does the system explain its decisions?}}
-        \item \textcolor{coolgray}{\textit{TODO: Example output showing rationale and confidence}}
-        \item \textcolor{coolgray}{\textit{TODO: What makes the reasoning traceable?}}
+        \item \textcolor{coolgray}{\textit{TODO: description and example}}
       \end{itemize}
     \end{column}
 
     \begin{column}{0.48\textwidth}
+      {\small\Raleway\bfseries\color{aggieblue} Per-Layer Attention Maximums}\\[0.4em]
       \footnotesize
       \begin{itemize}
         \setlength{\itemsep}{0.35em}
-        \item \textcolor{coolgray}{\textit{TODO: Per-iteration history and what it shows}}
-        \item \textcolor{coolgray}{\textit{TODO: Output structure and action types}}
-        \item \textcolor{coolgray}{\textit{TODO: How users access results (CLI, API)}}
+        \item \textcolor{coolgray}{\textit{TODO: description and example}}
       \end{itemize}
     \end{column}
 
@@ -729,7 +727,7 @@
     \end{tabular}
   }%
 
-  \vspace{0.4em}
+  \vspace{0.8em}
 
   \begin{columns}[T, onlytextwidth]
     \begin{column}{0.47\textwidth}
@@ -778,25 +776,16 @@
     \end{column}
 
     \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Limitations}\\[0.4em]
+      {\small\Raleway\bfseries\color{aggieblue} Limitations \& Future Work}\\[0.4em]
       \footnotesize
       \begin{itemize}
         \setlength{\itemsep}{0.35em}
-        \item SQLite only --- proposal planned PostgreSQL/MySQL support
-        \item 110 queries vs.\ the proposed 250--300 pairs; no Spider/BIRD or real GitHub commit pairs
-        \item No baseline comparison (zero-shot LLM vs.\ structured prompt) as proposed
-        \item Scales limited to 5k rows --- proposal targeted 10k--1M
-      \end{itemize}
-
-      \vspace{0.3em}
-      {\small\Raleway\bfseries\color{aggieblue} Future Work}\\[0.4em]
-      \footnotesize
-      \begin{itemize}
-        \setlength{\itemsep}{0.35em}
-        \item Multi-dialect support (PostgreSQL, MySQL)
-        \item Real database connections for production testing
-        \item Larger or fine-tuned models for better output
-        \item RAG for query-plan-aware optimization
+        \item SQLite only --- future: multi-dialect support (PostgreSQL, MySQL)
+        \item 110 queries vs.\ the proposed 250--300 pairs --- future: Spider/BIRD benchmarks and real GitHub commit pairs
+        \item No baseline comparison --- future: zero-shot LLM vs.\ structured prompt
+        \item Scales limited to 5k rows --- future: real database connections for production-scale testing
+        \item Local 7B model --- future: larger or fine-tuned models for better output
+        \item RAG for query-plan-aware optimization (original reach goal)
       \end{itemize}
     \end{column}
 
