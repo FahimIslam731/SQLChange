@@ -729,31 +729,29 @@
     \end{tabular}
   }%
 
-  \vspace{0.5em}
+  \vspace{0.4em}
 
   \begin{columns}[T, onlytextwidth]
     \begin{column}{0.47\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Strengths}\\[0.3em]
-      \footnotesize
+      {\small\Raleway\bfseries\color{aggieblue} Key Findings}\\[0.2em]
+      \scriptsize
       \begin{itemize}
-        \setlength{\itemsep}{0.25em}
-        \item 99\% pipeline success rate (1 error in 100)
-        \item 98\% valid recommendations (parseable SQL)
-        \item No-DDL inference works: 20/20 valid outputs
-        \item Simple queries: 79\% semantic equivalence
-        \item Converges fast: avg 1.6 iterations
+        \setlength{\itemsep}{0.2em}
+        \item \textbf{Reliable:} only 1 parse error in 100 queries
+        \item \textbf{Conservative:} 55\% kept original --- avoids unnecessary optimization. Optimization rate scales with complexity (12\% simple $\to$ 51\% moderate $\to$ 66\% complex)
+        \item \textbf{Anti-pattern detection:} 75\% of degraded queries correctly fixed --- SELECT * and unnecessary subqueries reliably caught
+        \item \textbf{DDL-robust:} equivalence similar for DDL vs.\ no-DDL --- inference path performs just as well
       \end{itemize}
     \end{column}
     \hfill
     \begin{column}{0.47\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Limitations}\\[0.3em]
-      \footnotesize
+      {\small\Raleway\bfseries\color{aggieblue} Limitations}\\[0.2em]
+      \scriptsize
       \begin{itemize}
-        \setlength{\itemsep}{0.25em}
-        \item Complex queries: only 52\% equivalence --- multi-join and window function rewrites often alter result sets
-        \item Degraded queries: 60\% equivalence --- LLM sometimes over-optimizes
-        \item Avg 34.8s per query --- local 7B model is the bottleneck
-        \item Performance scores moderate (6.9 avg) --- SQLite micro-timings have high variance
+        \setlength{\itemsep}{0.2em}
+        \item \textbf{Complex queries:} only 52\% equivalence --- 14 of 22 non-equivalent results were complex queries; joins and window functions cause subtle result-set changes
+        \item \textbf{Iteration penalty:} single-iteration queries scored 7.5 avg perf vs.\ 5.6 for multi-iteration --- harder queries that need more passes are also harder to optimize well
+        \item \textbf{Risk is conservative:} only 15\% of optimizations flagged high-risk, appropriate for production SQL
       \end{itemize}
     \end{column}
   \end{columns}
