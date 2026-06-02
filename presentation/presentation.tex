@@ -114,7 +114,7 @@
 \title{SQLChange: An Agentic Reasoning Pipeline for SQL Query Optimization}
 \subtitle{}
 \author{Ahmed Khan \and Fahim Islam \and Dev Rathod \and Arnav Akula \and Devarchith Parashara Batchu}
-\institute{ECS 189G --- Large Foundation Models \\ University of California, Davis}
+\institute{ECS 189G --- Large Foundation Models: Final Project \\ University of California, Davis}
 \date{June 2026}
 
 \titlegraphic{}
@@ -603,8 +603,6 @@
   \end{tikzpicture}%
   }% end resizebox
 
-  \vspace{0.4em}
-  \rule{0.9\textwidth}{0.3pt}
   \vspace{0.2em}
 
   % --- Two columns: loop mechanics + stop conditions ---
@@ -769,9 +767,9 @@
         \setlength{\itemsep}{0.35em}
         \item End-to-end agentic pipeline that \textit{generates} optimized SQL --- the proposal planned comparison only; we went further
         \item Execution-verified: synthetic DB testing catches silent result-set changes that LLM-only approaches miss
-        \item Iterative feedback loop (not in original proposal) --- labels feed back to the LLM for progressive improvement
+        \item Iterative feedback loop --- labels feed back to the LLM for progressive improvement
         \item Schema inference from queries alone --- works without DDL, which the proposal assumed would always be available
-        \item Runs fully local on Qwen 2.5 7B via Ollama --- no data leaves the machine
+        \item Runs fully local via Ollama --- no data leaves the machine. Evaluation on Qwen2.5:7b; interpretability demo on Qwen3-coder:30b-a3b
       \end{itemize}
     \end{column}
 
