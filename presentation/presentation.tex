@@ -13,7 +13,7 @@
 \usepackage{booktabs}
 \usepackage{mathtools}
 \usepackage{tikz}
-\usetikzlibrary{positioning,arrows.meta,shapes.geometric,calc,backgrounds}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric,calc,backgrounds,fit}
 \usepackage{hyperref}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
@@ -413,10 +413,11 @@
 \begin{frame}{Recommendation Engine}
   \begin{columns}[T]
 
-    \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} LLM-Powered Optimization}\\[0.6em]
+    \begin{column}{0.52\textwidth}
+      {\small\Raleway\bfseries\color{aggieblue} LLM-Powered Optimization}\\[0.5em]
+      \small
       \begin{itemize}
-        \setlength{\itemsep}{0.6em}
+        \setlength{\itemsep}{0.5em}
         \item LLM receives \textbf{full upstream context}: parsed schema, ER graph, prior execution evidence, and iteration labels
         \item Generates optimized SQL with action type (\texttt{optimize}, \texttt{rewrite}, \texttt{keep\_original}, \texttt{flag\_for\_review})
         \item Outputs confidence score (1--10) and natural-language rationale
@@ -425,15 +426,14 @@
     \end{column}
 
     \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Three-Layer Validation}\\[0.6em]
-      \begin{beamercolorbox}[wd=\textwidth,rounded=true,shadow=false,sep=0.5em]{boxgray}
-        \usebeamerfont{footline}\color{coolgray}
-        \begin{flushleft}
-        \textbf{\color{aggieblue}1. Syntax check} --- sqlglot must successfully parse the output as a valid SELECT/UNION/INTERSECT/EXCEPT\\[0.4em]
-        \textbf{\color{aggieblue}2. SQLite compatibility} --- flags unsupported patterns (DATE\_SUB, INTERVAL, IF(), ILIKE, RIGHT JOIN) and suggests SQLite equivalents\\[0.4em]
-        \textbf{\color{aggieblue}3. Schema reference} --- every table and column in the recommended SQL must exist in the parsed schema (allows aliases and CTEs)
-        \end{flushleft}
-      \end{beamercolorbox}
+      {\small\Raleway\bfseries\color{aggieblue} Three-Layer Validation}\\[0.5em]
+      \small
+      \begin{itemize}
+        \setlength{\itemsep}{0.5em}
+        \item \textbf{Syntax check} --- sqlglot must parse the output as valid SQL (SELECT, UNION, etc.)
+        \item \textbf{SQLite compatibility} --- flags unsupported patterns (DATE\_SUB, INTERVAL, IF(), ILIKE, RIGHT JOIN) and suggests equivalents
+        \item \textbf{Schema reference} --- every table and column in the recommended SQL must exist in the parsed schema (allows aliases and CTEs)
+      \end{itemize}
     \end{column}
 
   \end{columns}
@@ -447,9 +447,10 @@
   \begin{columns}[T]
 
     \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Synthetic Database Testing}\\[0.6em]
+      {\small\Raleway\bfseries\color{aggieblue} Synthetic Database Testing}\\[0.5em]
+      \small
       \begin{itemize}
-        \setlength{\itemsep}{0.5em}
+        \setlength{\itemsep}{0.4em}
         \item Deterministic in-memory SQLite databases seeded by hash
         \item \textbf{Three scales:} 50 / 500 / 5{,}000 rows per table
         \item Realistic join conditions ($\sim$75\% match rate)
@@ -460,24 +461,14 @@
     \end{column}
 
     \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Reasoning Labels}\\[0.6em]
-      \begin{beamercolorbox}[wd=\textwidth,rounded=true,shadow=false,sep=0.4em]{boxgray}
-        \centering{\footnotesize\bfseries\color{aggieblue} Semantic (equivalence)}\\[0.2em]
-        \usebeamerfont{footline}\color{coolgray}
-        Deterministic rules classify from execution output; LLM refines only when confidence is low
-      \end{beamercolorbox}
-      \vspace{0.3em}
-      \begin{beamercolorbox}[wd=\textwidth,rounded=true,shadow=false,sep=0.4em]{boxgray}
-        \centering{\footnotesize\bfseries\color{aggieblue} Performance (1--10)}\\[0.2em]
-        \usebeamerfont{footline}\color{coolgray}
-        Multi-scale timing analysis; 8--10 = significant improvement, 1--2 = severe degradation
-      \end{beamercolorbox}
-      \vspace{0.3em}
-      \begin{beamercolorbox}[wd=\textwidth,rounded=true,shadow=false,sep=0.4em]{boxgray}
-        \centering{\footnotesize\bfseries\color{aggieblue} Risk (1--10)}\\[0.2em]
-        \usebeamerfont{footline}\color{coolgray}
-        Table importance, join depth, cross-table WHERE conditions, row-count mismatches
-      \end{beamercolorbox}
+      {\small\Raleway\bfseries\color{aggieblue} Reasoning Labels}\\[0.5em]
+      \small
+      \begin{itemize}
+        \setlength{\itemsep}{0.4em}
+        \item \textbf{Semantic} (equivalence) --- deterministic rules classify from execution output; LLM refines only when confidence is low
+        \item \textbf{Performance} (1--10) --- multi-scale timing analysis; 8--10 = significant improvement, 1--2 = severe degradation
+        \item \textbf{Risk} (1--10) --- table importance, join depth, cross-table WHERE conditions, row-count mismatches
+      \end{itemize}
     \end{column}
 
   \end{columns}
@@ -491,43 +482,34 @@
   \begin{columns}[T]
 
     \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Feedback Loop}\\[0.6em]
+      {\small\Raleway\bfseries\color{aggieblue} How the Loop Works}\\[0.4em]
       \begin{itemize}
-        \setlength{\itemsep}{0.6em}
-        \item Pipeline loops back if quality thresholds are not met
-        \item All three labels (semantic, performance, risk) are fed back to the LLM on the next iteration
-        \item LLM adjusts its recommendation based on what went wrong
-        \item Default limit: \textbf{3 iterations} (configurable)
+        \setlength{\itemsep}{0.35em}
+        \item The execution harness runs both queries on synthetic data and produces equivalence + timing results
+        \item Three labelers score the result: \textbf{semantic} (did the output change?), \textbf{performance} (is it faster?), \textbf{risk} (is it safe?)
+        \item Deterministic rules assign labels first; the LLM only refines when confidence is low
+        \item All scores feed back to the LLM, which generates an improved query with that context
+        \item Loops until thresholds met (max 3 passes)
       \end{itemize}
-
-      \vspace{0.6em}
-      \setbeamercolor{boxblue}{bg=aggieblue,fg=white}
-      \begin{beamercolorbox}[wd=\textwidth,rounded=true,leftskip=0.7em,rightskip=0.7em,sep=0.5em]{boxblue}
-        \centering\small\Lato\bfseries\color{white}
-        Labels are computed deterministically first, then refined by LLM only when uncertain
-      \end{beamercolorbox}
     \end{column}
 
     \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Stop Conditions}\\[0.6em]
-      \begin{beamercolorbox}[wd=\textwidth,rounded=true,shadow=false,sep=0.5em]{boxgray}
-        \usebeamerfont{footline}\color{coolgray}
-        \begin{flushleft}
-        Pipeline stops when \textbf{any} of these hold:\\[0.4em]
-        \textbf{\color{aggieblue}1.} Performance $\geq 8$ \textbf{and} risk $\leq 3$\\[0.2em]
-        \textbf{\color{aggieblue}2.} LLM recommends \texttt{keep\_original}\\[0.2em]
-        \textbf{\color{aggieblue}3.} Generated SQL fails validation\\[0.2em]
-        \textbf{\color{aggieblue}4.} Max iterations reached
-        \end{flushleft}
-      \end{beamercolorbox}
-
-      \vspace{0.5em}
-      {\small\Raleway\bfseries\color{aggieblue} Why Deterministic Scoring?}\\[0.4em]
+      {\small\Raleway\bfseries\color{aggieblue} Stop Conditions}\\[0.5em]
       \begin{itemize}
         \setlength{\itemsep}{0.4em}
-        \item \small Reproducible --- same input always yields same labels
-        \item \small Cost-efficient --- avoids unnecessary LLM calls
-        \item \small Auditable --- scoring logic is inspectable, not a black box
+        \item Performance $\geq 8$ \textbf{and} risk $\leq 3$
+        \item LLM recommends \texttt{keep\_original}
+        \item Generated SQL fails validation
+        \item Max iterations reached (default: 3)
+      \end{itemize}
+
+      \vspace{0.6em}
+      {\small\Raleway\bfseries\color{aggieblue} Per-Iteration Context}\\[0.5em]
+      \begin{itemize}
+        \setlength{\itemsep}{0.4em}
+        \item Each iteration passes the prior iteration's scores, labels, and rationale to the LLM
+        \item If risk $\geq 7$, the LLM switches to a conservative optimization strategy
+        \item If semantic label is ``narrower'' or ``different'', the LLM prioritizes preserving the original result set
       \end{itemize}
     \end{column}
 
