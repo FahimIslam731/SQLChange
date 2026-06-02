@@ -642,6 +642,8 @@
 % 8. EVALUATION
 % ==========================================================================
 
+% NOTE: Slides 8 and 9 are templates. Fill in after running the evaluation script.
+
 \begin{frame}{Evaluation}
   \begin{columns}[T]
 
@@ -672,15 +674,14 @@
     \end{column}
 
     \begin{column}{0.52\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Metrics Measured}\\[0.5em]
+      {\small\Raleway\bfseries\color{aggieblue} Evaluation Setup}\\[0.5em]
       \footnotesize
       \begin{itemize}
         \setlength{\itemsep}{0.35em}
-        \item \textbf{Semantic equivalence} --- does the optimized query return the same results? (identical / narrower / broader / different)
-        \item \textbf{Performance score} (1--10) --- speedup measured at 3 scales (50 / 500 / 5k rows)
-        \item \textbf{Risk score} (1--10) --- safety of the change based on table hierarchy and join complexity
-        \item \textbf{Success rate} --- \% of queries producing valid, parseable optimizations
-        \item \textbf{Iteration depth} --- how many passes before the pipeline converges
+        \item \textcolor{coolgray}{\textit{TODO: Describe the evaluation methodology}}
+        \item \textcolor{coolgray}{\textit{TODO: What does the evaluation script measure?}}
+        \item \textcolor{coolgray}{\textit{TODO: How are results aggregated?}}
+        \item \textcolor{coolgray}{\textit{TODO: Any baselines or comparisons?}}
       \end{itemize}
     \end{column}
 
@@ -694,39 +695,46 @@
 \begin{frame}{Results \& Analysis}
   \centering
 
-  % TODO: Replace placeholder values with actual evaluation results
-  \resizebox{0.90\textwidth}{!}{%
+  {\small\color{coolgray}\textit{Fill in table and analysis after running evaluation.}}
+
+  \vspace{0.8em}
+
+  \resizebox{0.92\textwidth}{!}{%
     \begin{tabular}{lccccc}
       \toprule
-      \textbf{Query Type} & \textbf{Sem.\ Match} & \textbf{Avg.\ Speedup} & \textbf{Avg.\ Risk} & \textbf{Avg.\ Perf.} & \textbf{Avg.\ Iters} \\
+      \textbf{Query Type} & \textbf{Metric 1} & \textbf{Metric 2} & \textbf{Metric 3} & \textbf{Metric 4} & \textbf{Metric 5} \\
       \midrule
-      Basic SELECT       & ---  & ---  & ---  & ---  & --- \\
-      Multi-Table JOIN   & ---  & ---  & ---  & ---  & --- \\
-      Subquery           & ---  & ---  & ---  & ---  & --- \\
-      Aggregation        & ---  & ---  & ---  & ---  & --- \\
-      Window Function    & ---  & ---  & ---  & ---  & --- \\
+      \textit{Category 1}  & ---  & ---  & ---  & ---  & --- \\
+      \textit{Category 2}  & ---  & ---  & ---  & ---  & --- \\
+      \textit{Category 3}  & ---  & ---  & ---  & ---  & --- \\
+      \textit{Category 4}  & ---  & ---  & ---  & ---  & --- \\
+      \textit{Category 5}  & ---  & ---  & ---  & ---  & --- \\
       \midrule
-      \textbf{Overall}   & ---  & ---  & ---  & ---  & --- \\
+      \textbf{Overall}     & ---  & ---  & ---  & ---  & --- \\
       \bottomrule
     \end{tabular}
   }%
 
-  \vspace{1.0em}
+  \vspace{0.8em}
 
   \begin{columns}[T, onlytextwidth]
     \begin{column}{0.47\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Where it works well}\\[0.4em]
+      {\small\Raleway\bfseries\color{aggieblue} Strengths}\\[0.4em]
+      \footnotesize
       \begin{itemize}
         \setlength{\itemsep}{0.3em}
-        \item \small TODO: add strengths from evaluation run
+        \item \textcolor{coolgray}{\textit{TODO: where does the system perform well?}}
+        \item \textcolor{coolgray}{\textit{TODO: which query types benefit most?}}
       \end{itemize}
     \end{column}
     \hfill
     \begin{column}{0.47\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Where it struggles}\\[0.4em]
+      {\small\Raleway\bfseries\color{aggieblue} Limitations}\\[0.4em]
+      \footnotesize
       \begin{itemize}
         \setlength{\itemsep}{0.3em}
-        \item \small TODO: add failure modes from evaluation run
+        \item \textcolor{coolgray}{\textit{TODO: where does the system struggle?}}
+        \item \textcolor{coolgray}{\textit{TODO: common failure modes?}}
       \end{itemize}
     \end{column}
   \end{columns}
