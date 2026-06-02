@@ -290,8 +290,8 @@
     % ===== TOP ROW ARROWS =====
     \draw[flow] (input) -- (parse);
     \draw[flow] (parse) -- (ddl);
-    \draw[flow] (ddl) |- (extddl);
-    \draw[flow] (ddl) |- (infer);
+    \draw[flow] (ddl) |- (extddl) node[font=\footnotesize\bfseries, text=aggieblue, pos=0.15, left, xshift=-2pt] {yes};
+    \draw[flow] (ddl) |- (infer) node[font=\footnotesize\bfseries, text=aggieblue, pos=0.15, left, xshift=-2pt] {no};
     \draw[flow] (extddl) -| (er);
     \draw[flow] (infer) -| (er);
 
@@ -319,6 +319,8 @@
 
   \end{tikzpicture}%
   }% end resizebox
+  \vspace{0.3em}
+  \footnotesize\textbf{DDL} = Data Definition Language (\texttt{CREATE TABLE}, schema definitions)
   \vfill
 \end{frame}
 
@@ -327,25 +329,62 @@
 % ==========================================================================
 
 \begin{frame}{Parsing \& ER Graph Construction}
+  \vspace{-0.5em}
   \begin{columns}[T]
 
     \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Two Parsing Paths}\\[0.6em]
-      \begin{beamercolorbox}[wd=\textwidth,rounded=true,shadow=false,sep=0.5em]{boxgray}
-        \centering{\footnotesize\bfseries\color{aggieblue} Path 1: DDL Provided}\\[0.3em]
-        \usebeamerfont{footline}\color{coolgray}
-        \begin{flushleft}
-        \textbf{sqlglot} parses DDL to extract tables, column types, primary/foreign keys, and constraints directly
-        \end{flushleft}
-      \end{beamercolorbox}
-      \vspace{0.4em}
-      \begin{beamercolorbox}[wd=\textwidth,rounded=true,shadow=false,sep=0.5em]{boxgray}
-        \centering{\footnotesize\bfseries\color{aggieblue} Path 2: No DDL (Inference)}\\[0.3em]
-        \usebeamerfont{footline}\color{coolgray}
-        \begin{flushleft}
-        Fast regex extracts table/column names from the query itself; LLM fallback infers types and relationships for ambiguous cases
-        \end{flushleft}
-      \end{beamercolorbox}
+      \centering
+      \resizebox{!}{0.82\textheight}{%
+      \begin{tikzpicture}[
+        node distance=0.4cm,
+        box/.style={rectangle, rounded corners=3pt, minimum height=0.7cm, minimum width=2.8cm,
+          font=\scriptsize\bfseries, align=center, inner sep=3pt, draw=none},
+        parsebox/.style={box, fill=aggieblue, text=white},
+        ddlbox/.style={box, fill=aggieblue!15, text=aggieblue},
+        llmbox/.style={box, fill=aggiegoldDark, text=white},
+        erbox/.style={box, fill=aggieblue!80, text=white},
+        dec/.style={diamond, aspect=2, minimum height=0.5cm, font=\scriptsize\bfseries,
+          fill=aggiegold!25, draw=aggiegoldDark, line width=0.4pt,
+          text=aggieblueDark, inner sep=2pt, align=center},
+        arr/.style={-{Stealth[length=2pt, width=1.5pt]}, semithick, color=coolgray},
+        sublbl/.style={font=\scriptsize\bfseries, text=aggieblue},
+      ]
+        % --- Parse & Extract ---
+        \node[parsebox] (parse) {Parse \& Extract\\[-0.5ex]{\tiny sqlglot AST traversal}\\[-0.5ex]{\tiny tables, columns, joins}};
+        \node[dec, below=0.4cm of parse] (ddl) {DDL\\provided?};
+        \node[ddlbox, below left=0.5cm and 0.6cm of ddl] (parsesql) {\texttt{parse\_sql()}\\[-0.5ex]{\tiny DDL $\to$ full schema}\\[-0.5ex]{\tiny 100\% accurate}};
+        \node[llmbox, below right=0.5cm and 0.6cm of ddl] (inferctx) {\texttt{infer\_context()}\\[-0.5ex]{\tiny scope-aware inference}\\[-0.5ex]{\tiny $\sim$85--90\% accurate}};
+
+        \draw[arr] (parse) -- (ddl);
+        \draw[arr] (ddl) -| (parsesql);
+        \node[sublbl] at ([yshift=4pt]ddl.west) {yes};
+        \draw[arr] (ddl) -| (inferctx);
+        \node[sublbl] at ([yshift=-4pt]ddl.east) {no};
+
+        % --- ER Graph Builder ---
+        \node[erbox, below=1.4cm of ddl] (tblparse) {Table parser\\[-0.5ex]{\tiny extract table names from schema}};
+        \node[dec, below=0.4cm of tblparse] (joinkey) {Join key\\present?};
+        \node[ddlbox, below left=0.5cm and 0.6cm of joinkey] (pynode) {Python node\\[-0.5ex]{\tiny direct extraction from keys}\\[-0.5ex]{\tiny confidence: high}};
+        \node[llmbox, below right=0.5cm and 0.6cm of joinkey] (llminfer) {LLM inference\\[-0.5ex]{\tiny infer from naming conventions}\\[-0.5ex]{\tiny LLM call 1}};
+        \node[erbox, below=1.4cm of joinkey] (builder) {Build ER graph\\[-0.5ex]{\tiny table importance, graph depth}\\[-0.5ex]{\tiny cross-table risk detect}};
+
+        \draw[arr] (parsesql.south) |- (tblparse.west);
+        \draw[arr] (inferctx.south) |- (tblparse.east);
+        \draw[arr] (tblparse) -- (joinkey);
+        \draw[arr] (joinkey) -| (pynode);
+        \node[sublbl] at ([yshift=4pt]joinkey.west) {yes};
+        \draw[arr] (joinkey) -| (llminfer);
+        \node[sublbl] at ([yshift=-4pt]joinkey.east) {no};
+        \draw[arr] (pynode.south) |- (builder.west);
+        \draw[arr] (llminfer.south) |- (builder.east);
+
+        % --- Section label ---
+        \begin{scope}[on background layer]
+          \node[fit=(tblparse)(joinkey)(pynode)(llminfer)(builder),
+                fill=aggieblue!8, rounded corners=5pt, inner sep=6pt] (erframe) {};
+        \end{scope}
+      \end{tikzpicture}%
+      }% end resizebox
     \end{column}
 
     \begin{column}{0.48\textwidth}
