@@ -645,25 +645,42 @@
 \begin{frame}{Evaluation}
   \begin{columns}[T]
 
-    \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Query Corpus --- 110 Queries}\\[0.6em]
+    \begin{column}{0.45\textwidth}
+      {\small\Raleway\bfseries\color{aggieblue} Query Corpus --- 110 Queries}\\[0.5em]
+      \footnotesize
       \begin{itemize}
-        \setlength{\itemsep}{0.5em}
-        \item \textbf{20+ domains:} defense, healthcare, oceans, philanthropy, space, AI, blockchain, cosmetics, \ldots
-        \item \textbf{Complexity levels:} basic SQL, aggregation, multiple joins, subqueries, window functions
-        \item Each row: domain, complexity type, task type, natural-language prompt, DDL context, SQL
+        \setlength{\itemsep}{0.3em}
+        \item \textbf{72 domains:} defense, healthcare, oceans, space, AI, blockchain, cosmetics, \ldots
+        \item Each query includes: natural-language prompt, DDL context, ground-truth SQL, explanation
       \end{itemize}
+
+      \vspace{0.2em}
+      {\small\Raleway\bfseries\color{aggieblue} Complexity Distribution}\\[0.2em]
+      \scriptsize
+      \begin{tabular}{lr}
+        \toprule
+        \textbf{Type} & \textbf{Count} \\
+        \midrule
+        Aggregation & 32 \\
+        Basic SQL & 29 \\
+        Window functions & 19 \\
+        Single join & 11 \\
+        Multiple joins / Subqueries & 16 \\
+        Set operations & 3 \\
+        \bottomrule
+      \end{tabular}
     \end{column}
 
-    \begin{column}{0.48\textwidth}
-      {\small\Raleway\bfseries\color{aggieblue} Metrics Measured}\\[0.6em]
+    \begin{column}{0.52\textwidth}
+      {\small\Raleway\bfseries\color{aggieblue} Metrics Measured}\\[0.5em]
+      \footnotesize
       \begin{itemize}
-        \setlength{\itemsep}{0.5em}
-        \item \textbf{Semantic equivalence} --- does the optimized query return the same results?
-        \item \textbf{Performance score} (1--10) --- speedup across 3 data scales
-        \item \textbf{Risk score} (1--10) --- safety of the recommended change
-        \item \textbf{Success rate} --- \% of queries that produce valid optimizations
-        \item \textbf{Iteration depth} --- passes before convergence
+        \setlength{\itemsep}{0.35em}
+        \item \textbf{Semantic equivalence} --- does the optimized query return the same results? (identical / narrower / broader / different)
+        \item \textbf{Performance score} (1--10) --- speedup measured at 3 scales (50 / 500 / 5k rows)
+        \item \textbf{Risk score} (1--10) --- safety of the change based on table hierarchy and join complexity
+        \item \textbf{Success rate} --- \% of queries producing valid, parseable optimizations
+        \item \textbf{Iteration depth} --- how many passes before the pipeline converges
       \end{itemize}
     \end{column}
 
